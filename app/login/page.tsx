@@ -1,21 +1,19 @@
 'use client'
 
-import { createClient } from '@/lib/supabase/client'
-
 export default function LoginPage() {
-  const supabase = createClient()
-
-  const handleLogin = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: location.origin + '/dashboard' }
-    })
+  const handleLogin = () => {
+    alert('Login dengan Google akan segera aktif')
   }
 
   return (
     <div style={{ textAlign: 'center', marginTop: '50px' }}>
-      <h1>Login</h1>
-      <button onClick={handleLogin}>Login dengan Google</button>
+      <h1>Login Clara</h1>
+      <button 
+        onClick={handleLogin}
+        style={{ padding: '10px 20px', marginTop: '20px', cursor: 'pointer' }}
+      >
+        Login dengan Google
+      </button>
     </div>
   )
 }
