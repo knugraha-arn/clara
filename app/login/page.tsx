@@ -2,7 +2,7 @@
 
 export default function LoginPage() {
   const handleLogin = () => {
-    alert('Login dengan Google akan segera aktif')
+    alert('Fitur login akan segera aktif')
   }
 
   return (
@@ -12,7 +12,7 @@ export default function LoginPage() {
         onClick={handleLogin}
         style={{ padding: '10px 20px', marginTop: '20px', cursor: 'pointer' }}
       >
-        Login dengan Google
+        Login Demo
       </button>
     </div>
   )
