@@ -1,15 +1,157 @@
-import SearchBar from "@/components/search/SearchBar";
+"use client";
+
+import { useState, useCallback } from "react";
+import { CATEGORY_LABELS } from "@/lib/utils";
+import type { SearchResult } from "@/types";
+
+const CAT_COLORS: Record<string, { bg: string; color: string }> = {
+  surat_masuk:  { bg: "#EEF2FF", color: "#0344D8" },
+  surat_keluar: { bg: "#F0FDF4", color: "#16A34A" },
+  kontrak:      { bg: "#FFFBEB", color: "#D97706" },
+  memo:         { bg: "#F9FAFB", color: "#6B7280" },
+  laporan:      { bg: "#EFF6FF", color: "#2563EB" },
+  kebijakan:    { bg: "#FEF2F2", color: "#DC2626" },
+  undangan:     { bg: "#FDF4FF", color: "#9333EA" },
+  pengumuman:   { bg: "#FFF7ED", color: "#EA580C" },
+  lainnya:      { bg: "#F9FAFB", color: "#9CA3AF" },
+};
+
+function formatDate(d: string) {
+  return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" }).format(new Date(d));
+}
 
 export default function SearchPage() {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
+
+  const handleSearch = useCallback(async (q: string) => {
+    if (!q.trim()) return;
+    setLoading(true);
+    setSearched(true);
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      setResults(data.results || []);
+    } catch {
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const isAI = query.trim().split(" ").length > 3;
+
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold text-[#1A1F2E]">Pencarian Dokumen</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Cari dengan kata kunci spesifik atau deskripsi konseptual — AI akan memahami maksud Anda
-        </p>
+    <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+      {/* Top bar */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 28px", borderBottom: "1px solid #EFEFEF", backgroundColor: "white" }}>
+        <h1 style={{ fontSize: 18, fontWeight: 700, color: "#1A1F2E", margin: 0 }}>Pencarian AI</h1>
       </div>
-      <SearchBar />
+
+      <div style={{ padding: "20px 28px" }}>
+        {/* Search input */}
+        <div style={{ position: "relative", marginBottom: 20 }}>
+          <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 18, pointerEvents: "none" }}>
+            {isAI ? "✨" : "🔍"}
+          </div>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSearch(query)}
+            placeholder="Cari dokumen... misal: 'kontrak kerja sama IT yang bermasalah'"
+            style={{
+              width: "100%", padding: "13px 130px 13px 44px", borderRadius: 12,
+              border: "1px solid #E5E7EB", fontSize: 14, fontFamily: "inherit",
+              backgroundColor: "white", outline: "none", boxSizing: "border-box",
+            }}
+          />
+          <div style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", display: "flex", gap: 6, alignItems: "center" }}>
+            {isAI && (
+              <span style={{ fontSize: 11, fontWeight: 600, backgroundColor: "#D1EA2C", color: "#1A1F2E", padding: "3px 8px", borderRadius: 5 }}>AI</span>
+            )}
+            <button
+              onClick={() => handleSearch(query)}
+              disabled={loading || !query.trim()}
+              style={{ backgroundColor: "#0344D8", color: "white", border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", opacity: loading || !query.trim() ? 0.5 : 1 }}
+            >
+              {loading ? "..." : "Cari"}
+            </button>
+          </div>
+        </div>
+
+        {/* Hints */}
+        {!searched && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
+            {[
+              { icon: "🔍", title: "Exact Match", desc: "Nomor surat, nama file, kata kunci spesifik" },
+              { icon: "✨", title: "AI Semantic", desc: "Ketik deskripsi konseptual (lebih dari 3 kata)" },
+            ].map((h) => (
+              <div key={h.title} style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 12, padding: "14px 16px", display: "flex", gap: 12, alignItems: "flex-start" }}>
+                <span style={{ fontSize: 20 }}>{h.icon}</span>
+                <div>
+                  <p style={{ fontWeight: 600, fontSize: 13, color: "#1A1F2E", margin: 0 }}>{h.title}</p>
+                  <p style={{ fontSize: 12, color: "#9CA3AF", margin: "3px 0 0" }}>{h.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Results */}
+        {searched && (
+          <div>
+            <p style={{ fontSize: 13, color: "#9CA3AF", marginBottom: 10 }}>
+              {loading ? "Mencari..." : `${results.length} dokumen ditemukan`}
+            </p>
+
+            {!loading && results.length > 0 && (
+              <div style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 14, overflow: "hidden" }}>
+                {/* Header */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 140px 100px", gap: 12, padding: "10px 16px", borderBottom: "1px solid #F5F5F5", backgroundColor: "#FAFAFA" }}>
+                  {["Dokumen", "Kategori", "Tanggal"].map((h) => (
+                    <span key={h} style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</span>
+                  ))}
+                </div>
+
+                {results.map((result, i) => {
+                  const doc = result.document;
+                  const catStyle = CAT_COLORS[doc.category] || CAT_COLORS.lainnya;
+                  return (
+                    <div
+                      key={doc.id}
+                      style={{
+                        display: "grid", gridTemplateColumns: "1fr 140px 100px", gap: 12,
+                        padding: "12px 16px",
+                        borderBottom: i < results.length - 1 ? "1px solid #F5F5F5" : "none",
+                        alignItems: "flex-start",
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                          <p style={{ fontSize: 13, fontWeight: 600, color: "#1A1F2E", margin: 0 }}>{doc.title}</p>
+                          <span style={{ fontSize: 10, backgroundColor: result.match_type === "semantic" ? "#EEF2FF" : "#F0FDF4", color: result.match_type === "semantic" ? "#0344D8" : "#16A34A", padding: "1px 6px", borderRadius: 4, fontWeight: 600, flexShrink: 0 }}>
+                            {result.match_type}
+                          </span>
+                        </div>
+                        {result.snippet && (
+                          <p style={{ fontSize: 11, color: "#6B7280", margin: 0, fontStyle: "italic" }}>"{result.snippet.slice(0, 120)}..."</p>
+                        )}
+                      </div>
+                      <span style={{ fontSize: 11, fontWeight: 600, backgroundColor: catStyle.bg, color: catStyle.color, padding: "3px 8px", borderRadius: 5, display: "inline-block", marginTop: 2 }}>
+                        {CATEGORY_LABELS[doc.category]}
+                      </span>
+                      <span style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>{formatDate(doc.created_at)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
