@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import DocumentUpload from "@/components/documents/DocumentUpload";
 import { CATEGORY_LABELS } from "@/lib/utils";
-import type { Document } from "@/types";
+import type { Document, DocumentCategory } from "@/types";
 
 const CAT_COLORS: Record<string, { bg: string; color: string }> = {
   surat_masuk:  { bg: "#EEF2FF", color: "#0344D8" },
@@ -25,33 +25,42 @@ function formatSize(b: number) {
   return `${(b / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-const CATEGORIES = [
-  { value: "all", label: "Semua" },
-  ...Object.entries(CATEGORY_LABELS).map(([value, label]) => ({ value, label })),
-];
-
 export default function DashboardPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [activeCategories, setActiveCategories] = useState<DocumentCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
   const [activeCategory, setActiveCategory] = useState("all");
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
-  const fetchDocuments = useCallback(async () => {
+  const fetchDocuments = useCallback(async (cat = "all") => {
     setLoading(true);
-    const url = activeCategory === "all" ? "/api/documents" : `/api/documents?category=${activeCategory}`;
+    const url = cat === "all" ? "/api/documents" : `/api/documents?category=${cat}`;
     const res = await fetch(url);
     const data = await res.json();
     setDocuments(data.documents || []);
+    // activeCategories hanya di-set saat fetch all supaya filter tidak berubah saat filter aktif
+    if (cat === "all") {
+      setActiveCategories(data.activeCategories || []);
+    }
     setLoading(false);
-  }, [activeCategory]);
+  }, []);
 
-  useEffect(() => { fetchDocuments(); }, [fetchDocuments]);
+  useEffect(() => { fetchDocuments("all"); }, [fetchDocuments]);
+
+  const handleCategoryClick = (cat: string) => {
+    setActiveCategory(cat);
+    fetchDocuments(cat);
+  };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Hapus dokumen ini?")) return;
     await fetch(`/api/documents?id=${id}`, { method: "DELETE" });
     setDocuments((prev) => prev.filter((d) => d.id !== id));
+    // Refresh kategori setelah hapus
+    const res = await fetch("/api/documents");
+    const data = await res.json();
+    setActiveCategories(data.activeCategories || []);
   };
 
   const handleDownload = async (id: string) => {
@@ -61,6 +70,17 @@ export default function DashboardPage() {
   };
 
   const today = new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(new Date());
+
+  // Stat cards — hanya kategori yang ada
+  const statCards = [
+    { label: "Total Dokumen", value: documents.length, color: "#0344D8", cat: "all" },
+    ...activeCategories.map((cat) => ({
+      label: CATEGORY_LABELS[cat] || cat,
+      value: documents.filter(d => d.category === cat).length,
+      color: CAT_COLORS[cat]?.color || "#9CA3AF",
+      cat,
+    })),
+  ].slice(0, 4); // max 4 stat cards
 
   return (
     <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
@@ -89,60 +109,89 @@ export default function DashboardPage() {
         {showUpload && (
           <div style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 14, padding: 20, marginBottom: 20 }}>
             <p style={{ fontWeight: 600, color: "#1A1F2E", margin: "0 0 14px", fontSize: 14 }}>Upload Dokumen Baru</p>
-            <DocumentUpload onSuccess={() => { setShowUpload(false); fetchDocuments(); }} />
+            <DocumentUpload onSuccess={() => { setShowUpload(false); fetchDocuments("all"); setActiveCategory("all"); }} />
           </div>
         )}
 
-        {/* Stats */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
-          {[
-            { label: "Total Dokumen", value: documents.length, color: "#0344D8" },
-            { label: "Surat Masuk", value: documents.filter(d => d.category === "surat_masuk").length, color: "#16A34A" },
-            { label: "Surat Keluar", value: documents.filter(d => d.category === "surat_keluar").length, color: "#D97706" },
-            { label: "Kontrak", value: documents.filter(d => d.category === "kontrak").length, color: "#9333EA" },
-          ].map((stat) => (
-            <div key={stat.label} style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 12, padding: "14px 16px" }}>
-              <p style={{ fontSize: 12, color: "#9CA3AF", margin: "0 0 4px" }}>{stat.label}</p>
-              <p style={{ fontSize: 24, fontWeight: 700, color: stat.color, margin: 0 }}>{stat.value}</p>
-            </div>
-          ))}
-        </div>
+        {/* Stat cards — dinamis */}
+        {statCards.length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${statCards.length}, 1fr)`, gap: 12, marginBottom: 20 }}>
+            {statCards.map((stat) => (
+              <div
+                key={stat.label}
+                onClick={() => handleCategoryClick(stat.cat)}
+                style={{
+                  backgroundColor: "white", border: `1px solid ${activeCategory === stat.cat ? stat.color : "#EFEFEF"}`,
+                  borderRadius: 12, padding: "14px 16px", cursor: "pointer", transition: "border 0.15s",
+                }}
+              >
+                <p style={{ fontSize: 12, color: "#9CA3AF", margin: "0 0 4px" }}>{stat.label}</p>
+                <p style={{ fontSize: 24, fontWeight: 700, color: stat.color, margin: 0 }}>{stat.value}</p>
+              </div>
+            ))}
+          </div>
+        )}
 
-        {/* Filter tabs */}
-        <div style={{ display: "flex", gap: 4, overflowX: "auto", marginBottom: 14, paddingBottom: 2 }}>
-          {CATEGORIES.map((cat) => (
+        {/* Filter tabs — hanya kategori yang ada */}
+        {activeCategories.length > 0 && (
+          <div style={{ display: "flex", gap: 4, marginBottom: 14, flexWrap: "wrap" }}>
             <button
-              key={cat.value}
-              onClick={() => setActiveCategory(cat.value)}
+              onClick={() => handleCategoryClick("all")}
               style={{
-                flexShrink: 0, padding: "5px 12px", borderRadius: 7, fontSize: 12, fontWeight: 500,
-                border: "1px solid", cursor: "pointer", fontFamily: "inherit", transition: "all 0.1s",
-                backgroundColor: activeCategory === cat.value ? "#0344D8" : "white",
-                color: activeCategory === cat.value ? "white" : "#6B7280",
-                borderColor: activeCategory === cat.value ? "#0344D8" : "#E5E7EB",
+                padding: "5px 12px", borderRadius: 7, fontSize: 12, fontWeight: 500,
+                border: "1px solid", cursor: "pointer", fontFamily: "inherit",
+                backgroundColor: activeCategory === "all" ? "#0344D8" : "white",
+                color: activeCategory === "all" ? "white" : "#6B7280",
+                borderColor: activeCategory === "all" ? "#0344D8" : "#E5E7EB",
               }}
             >
-              {cat.label}
+              Semua
             </button>
-          ))}
-        </div>
+            {activeCategories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => handleCategoryClick(cat)}
+                style={{
+                  padding: "5px 12px", borderRadius: 7, fontSize: 12, fontWeight: 500,
+                  border: "1px solid", cursor: "pointer", fontFamily: "inherit",
+                  backgroundColor: activeCategory === cat ? CAT_COLORS[cat]?.color || "#0344D8" : "white",
+                  color: activeCategory === cat ? "white" : "#6B7280",
+                  borderColor: activeCategory === cat ? CAT_COLORS[cat]?.color || "#0344D8" : "#E5E7EB",
+                }}
+              >
+                {CATEGORY_LABELS[cat] || cat}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Document list */}
         <div style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 14, overflow: "hidden" }}>
           {/* List header */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 140px 100px 80px 90px", gap: 12, padding: "10px 16px", borderBottom: "1px solid #F5F5F5", backgroundColor: "#FAFAFA" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 140px 100px 80px 70px", gap: 12, padding: "10px 16px", borderBottom: "1px solid #F5F5F5", backgroundColor: "#FAFAFA" }}>
             {["Dokumen", "Kategori", "Tanggal", "Ukuran", "Aksi"].map((h) => (
               <span key={h} style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</span>
             ))}
           </div>
 
           {loading ? (
-            <div style={{ padding: "40px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Memuat...</div>
+            <div style={{ padding: "40px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
+              Memuat...
+            </div>
           ) : documents.length === 0 ? (
             <div style={{ padding: "60px 0", textAlign: "center" }}>
               <p style={{ fontSize: 32, margin: "0 0 8px" }}>📂</p>
-              <p style={{ fontWeight: 600, color: "#6B7280", margin: 0 }}>Belum ada dokumen</p>
-              <p style={{ fontSize: 13, color: "#9CA3AF", marginTop: 4 }}>Upload PDF pertama Anda</p>
+              <p style={{ fontWeight: 600, color: "#6B7280", margin: 0 }}>
+                {activeCategory === "all" ? "Belum ada dokumen" : `Tidak ada dokumen kategori ${CATEGORY_LABELS[activeCategory as DocumentCategory] || activeCategory}`}
+              </p>
+              {activeCategory === "all" && (
+                <button
+                  onClick={() => setShowUpload(true)}
+                  style={{ marginTop: 12, color: "#0344D8", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontSize: 14, fontFamily: "inherit" }}
+                >
+                  Upload sekarang →
+                </button>
+              )}
             </div>
           ) : (
             documents.map((doc, i) => {
@@ -154,17 +203,13 @@ export default function DashboardPage() {
                   onMouseEnter={() => setHoveredId(doc.id)}
                   onMouseLeave={() => setHoveredId(null)}
                   style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 140px 100px 80px 90px",
-                    gap: 12,
-                    padding: "11px 16px",
+                    display: "grid", gridTemplateColumns: "1fr 140px 100px 80px 70px",
+                    gap: 12, padding: "11px 16px",
                     borderBottom: i < documents.length - 1 ? "1px solid #F5F5F5" : "none",
                     backgroundColor: isHovered ? "#FAFBFF" : "white",
-                    transition: "background 0.1s",
-                    alignItems: "center",
+                    transition: "background 0.1s", alignItems: "center",
                   }}
                 >
-                  {/* Title + summary */}
                   <div style={{ minWidth: 0 }}>
                     <p style={{ fontSize: 13, fontWeight: 600, color: "#1A1F2E", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {doc.title}
@@ -184,34 +229,20 @@ export default function DashboardPage() {
                       </div>
                     )}
                   </div>
-
-                  {/* Category */}
                   <div>
                     <span style={{ fontSize: 11, fontWeight: 600, backgroundColor: catStyle.bg, color: catStyle.color, padding: "3px 8px", borderRadius: 5 }}>
-                      {CATEGORY_LABELS[doc.category]}
+                      {CATEGORY_LABELS[doc.category] || doc.category}
                     </span>
                   </div>
-
-                  {/* Date */}
                   <span style={{ fontSize: 12, color: "#6B7280" }}>{formatDate(doc.created_at)}</span>
-
-                  {/* Size */}
                   <span style={{ fontSize: 12, color: "#9CA3AF" }}>{formatSize(doc.file_size)}</span>
-
-                  {/* Actions */}
                   <div style={{ display: "flex", gap: 4 }}>
-                    <button
-                      onClick={() => handleDownload(doc.id)}
-                      title="Download"
-                      style={{ width: 28, height: 28, borderRadius: 7, border: "1px solid #E5E7EB", backgroundColor: "white", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center" }}
-                    >
+                    <button onClick={() => handleDownload(doc.id)} title="Download"
+                      style={{ width: 28, height: 28, borderRadius: 7, border: "1px solid #E5E7EB", backgroundColor: "white", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center" }}>
                       ↓
                     </button>
-                    <button
-                      onClick={() => handleDelete(doc.id)}
-                      title="Hapus"
-                      style={{ width: 28, height: 28, borderRadius: 7, border: "1px solid #FEE2E2", backgroundColor: "white", cursor: "pointer", fontSize: 13, color: "#EF4444", display: "flex", alignItems: "center", justifyContent: "center" }}
-                    >
+                    <button onClick={() => handleDelete(doc.id)} title="Hapus"
+                      style={{ width: 28, height: 28, borderRadius: 7, border: "1px solid #FEE2E2", backgroundColor: "white", cursor: "pointer", fontSize: 13, color: "#EF4444", display: "flex", alignItems: "center", justifyContent: "center" }}>
                       ×
                     </button>
                   </div>

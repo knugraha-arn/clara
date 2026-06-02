@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 
-// GET /api/documents - list documents with optional category filter
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -9,7 +8,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const category = searchParams.get("category");
-  const limit = parseInt(searchParams.get("limit") || "20");
+  const limit = parseInt(searchParams.get("limit") || "50");
   const offset = parseInt(searchParams.get("offset") || "0");
 
   let query = supabase
@@ -26,10 +25,18 @@ export async function GET(request: NextRequest) {
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ documents: data });
+  // Ambil kategori yang benar-benar ada (distinct)
+  const { data: catData } = await supabase
+    .from("documents")
+    .select("category")
+    .eq("user_id", user.id)
+    .eq("status", "ready");
+
+  const activeCategories = [...new Set((catData || []).map((d: { category: string }) => d.category))];
+
+  return NextResponse.json({ documents: data, activeCategories });
 }
 
-// DELETE /api/documents?id=xxx
 export async function DELETE(request: NextRequest) {
   const supabase = await createClient();
   const adminSupabase = await createAdminClient();
@@ -40,7 +47,6 @@ export async function DELETE(request: NextRequest) {
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "ID diperlukan" }, { status: 400 });
 
-  // Get document first to find file path
   const { data: doc } = await supabase
     .from("documents")
     .select("file_path")
@@ -50,10 +56,8 @@ export async function DELETE(request: NextRequest) {
 
   if (!doc) return NextResponse.json({ error: "Dokumen tidak ditemukan" }, { status: 404 });
 
-  // Delete from storage
   await adminSupabase.storage.from("documents").remove([doc.file_path]);
 
-  // Delete from DB (embeddings cascade)
   const { error } = await supabase.from("documents").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
