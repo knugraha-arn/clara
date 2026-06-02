@@ -1,14 +1,11 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
 import type { AiAnalysisResult, DocumentCategory } from "@/types";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// gemini-2.0-flash: model terbaru, murah & cepat
-const flashModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-// embedding-001: versi stable yang tersedia di v1beta
-const embeddingModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
-
+// ============================================
+// Analisis dokumen halaman 1
+// ============================================
 export async function analyzeDocumentPage1(
   extractedText: string,
   fileName: string
@@ -34,10 +31,15 @@ Berikan analisis dalam format JSON berikut (HANYA JSON, tanpa penjelasan lain):
 }`;
 
   try {
-    const result = await flashModel.generateContent(prompt);
-    const text = result.response.text();
-    const cleaned = text.replace(/```json\n?|\n?```/g, "").trim();
-    const parsed = JSON.parse(cleaned) as AiAnalysisResult;
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.1,
+      response_format: { type: "json_object" },
+    });
+
+    const text = response.choices[0].message.content || "{}";
+    const parsed = JSON.parse(text) as AiAnalysisResult;
 
     const validCategories: DocumentCategory[] = [
       "surat_masuk", "surat_keluar", "kontrak", "memo",
@@ -46,10 +48,9 @@ Berikan analisis dalam format JSON berikut (HANYA JSON, tanpa penjelasan lain):
     if (!validCategories.includes(parsed.category)) {
       parsed.category = "lainnya";
     }
-
     return parsed;
   } catch (error) {
-    console.error("[Gemini] analyzeDocumentPage1 error:", error);
+    console.error("[OpenAI] analyzeDocumentPage1 error:", error);
     return {
       summary: "Gagal menganalisis dokumen secara otomatis.",
       category: "lainnya",
@@ -62,12 +63,18 @@ Berikan analisis dalam format JSON berikut (HANYA JSON, tanpa penjelasan lain):
   }
 }
 
+// ============================================
+// Generate embedding (dimension: 1536)
+// ============================================
 export async function generateEmbedding(text: string): Promise<number[]> {
   try {
-    const result = await embeddingModel.embedContent(text);
-    return result.embedding.values;
+    const response = await openai.embeddings.create({
+      model: "text-embedding-3-small",
+      input: text.slice(0, 8000),
+    });
+    return response.data[0].embedding;
   } catch (error) {
-    console.error("[Gemini] generateEmbedding error:", error);
+    console.error("[OpenAI] generateEmbedding error:", error);
     return [];
   }
 }
