@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: #0344D8;
+  --primary-hover: #387EE4;
+  --accent-lime: #D1EA2C;
+  --accent-amber: #FFC128;
+  --navy: #1A1F2E;
+  --gray-50: #F8F9FB;
+  --white: #FFFFFF;
+  --black: #000000;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  background: var(--gray-50);
+  color: var(--black);
+}
+
+@layer utilities {
+  .text-primary { color: var(--primary); }
+  .bg-primary { background-color: var(--primary); }
+  .border-primary { border-color: var(--primary); }
+}
