@@ -1,12 +1,14 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import Image from "next/image";
+import Link from "next/link";
 
 export default function DashboardNav({ user }: { user: User }) {
   const router = useRouter();
+  const pathname = usePathname();
   const supabase = createClient();
 
   const handleSignOut = async () => {
@@ -16,43 +18,54 @@ export default function DashboardNav({ user }: { user: User }) {
 
   const avatarUrl = user.user_metadata?.avatar_url;
   const name = user.user_metadata?.full_name || user.email;
+  const initials = (name || "U").split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
+
+  const navLinks = [
+    { href: "/dashboard", label: "Dokumen" },
+    { href: "/dashboard/search", label: "Pencarian AI" },
+  ];
 
   return (
     <nav className="bg-white border-b border-gray-100 sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between gap-6">
         {/* Logo */}
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[#0344D8] flex items-center justify-center">
-            <span className="text-[#D1EA2C] font-bold text-sm">C</span>
-          </div>
-          <span className="font-bold text-[#1A1F2E] text-lg tracking-tight">CLARA</span>
-        </div>
+        <Link href="/dashboard" className="flex items-center gap-2.5 shrink-0">
+          <Image src="/Logo Clara.png" alt="CLARA" width={28} height={28} className="rounded-lg" />
+          <span className="font-bold text-[#1A1F2E] text-base tracking-tight">CLARA</span>
+        </Link>
 
-        {/* Nav Links */}
-        <div className="hidden sm:flex items-center gap-6 text-sm font-medium text-gray-500">
-          <a href="/dashboard" className="hover:text-[#0344D8] transition-colors">Dokumen</a>
-          <a href="/dashboard/search" className="hover:text-[#0344D8] transition-colors">Pencarian</a>
+        {/* Nav */}
+        <div className="hidden sm:flex items-center gap-1 flex-1">
+          {navLinks.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                pathname === link.href
+                  ? "bg-[#0344D8]/8 text-[#0344D8]"
+                  : "text-gray-500 hover:text-gray-800 hover:bg-gray-100"
+              }`}
+            >
+              {link.label}
+            </Link>
+          ))}
         </div>
 
         {/* User */}
-        <div className="flex items-center gap-3">
-          <span className="hidden sm:block text-sm text-gray-600 truncate max-w-[160px]">{name}</span>
-          {avatarUrl ? (
-            <Image
-              src={avatarUrl}
-              alt={name || ""}
-              width={32}
-              height={32}
-              className="rounded-full"
-            />
-          ) : (
-            <div className="w-8 h-8 rounded-full bg-[#0344D8] flex items-center justify-center text-white text-sm font-semibold">
-              {(name || "U")[0].toUpperCase()}
-            </div>
-          )}
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="hidden sm:flex items-center gap-2">
+            {avatarUrl ? (
+              <Image src={avatarUrl} alt={name || ""} width={28} height={28} className="rounded-full" />
+            ) : (
+              <div className="w-7 h-7 rounded-full bg-[#0344D8] flex items-center justify-center text-white text-xs font-semibold">
+                {initials}
+              </div>
+            )}
+            <span className="text-sm text-gray-600 truncate max-w-[140px]">{name}</span>
+          </div>
           <button
             onClick={handleSignOut}
-            className="text-xs text-gray-400 hover:text-gray-700 transition-colors"
+            className="text-xs text-gray-400 hover:text-gray-700 border border-gray-200 hover:border-gray-300 px-3 py-1.5 rounded-lg transition-colors"
           >
             Keluar
           </button>
