@@ -3,16 +3,12 @@ import type { AiAnalysisResult, DocumentCategory } from "@/types";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
-// Model untuk text generation (murah & cepat)
-const flashModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+// gemini-2.0-flash: model terbaru, murah & cepat
+const flashModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-// Model untuk embedding
+// embedding-001: versi stable yang tersedia di v1beta
 const embeddingModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
 
-// ============================================
-// Analisis halaman 1 dokumen PDF
-// Menghasilkan: summary, kategori, tags, metadata
-// ============================================
 export async function analyzeDocumentPage1(
   extractedText: string,
   fileName: string
@@ -30,22 +26,19 @@ Berikan analisis dalam format JSON berikut (HANYA JSON, tanpa penjelasan lain):
 {
   "summary": "Ringkasan singkat isi dokumen dalam 2-3 kalimat bahasa Indonesia",
   "category": "salah satu dari: surat_masuk | surat_keluar | kontrak | memo | laporan | kebijakan | undangan | pengumuman | lainnya",
-  "category_confidence": 0.0 sampai 1.0,
-  "tags": ["array", "of", "relevant", "keywords", "max 5"],
-  "document_date": "YYYY-MM-DD atau null jika tidak ada",
-  "sender": "nama pengirim/instansi atau null",
-  "recipient": "nama penerima/instansi atau null"
+  "category_confidence": 0.0,
+  "tags": ["keyword1", "keyword2"],
+  "document_date": null,
+  "sender": null,
+  "recipient": null
 }`;
 
   try {
     const result = await flashModel.generateContent(prompt);
     const text = result.response.text();
-
-    // Strip markdown code blocks jika ada
     const cleaned = text.replace(/```json\n?|\n?```/g, "").trim();
     const parsed = JSON.parse(cleaned) as AiAnalysisResult;
 
-    // Validasi category
     const validCategories: DocumentCategory[] = [
       "surat_masuk", "surat_keluar", "kontrak", "memo",
       "laporan", "kebijakan", "undangan", "pengumuman", "lainnya"
@@ -69,34 +62,27 @@ Berikan analisis dalam format JSON berikut (HANYA JSON, tanpa penjelasan lain):
   }
 }
 
-// ============================================
-// Generate embedding untuk semantic search
-// ============================================
 export async function generateEmbedding(text: string): Promise<number[]> {
-  const result = await embeddingModel.embedContent(text);
-  return result.embedding.values;
+  try {
+    const result = await embeddingModel.embedContent(text);
+    return result.embedding.values;
+  } catch (error) {
+    console.error("[Gemini] generateEmbedding error:", error);
+    return [];
+  }
 }
 
-// ============================================
-// Chunk text untuk embedding pipeline
-// 500 kata per chunk, overlap 50 kata
-// ============================================
 export function chunkText(text: string, chunkSize = 500, overlap = 50): string[] {
   const words = text.split(/\s+/).filter(Boolean);
   const chunks: string[] = [];
-
   for (let i = 0; i < words.length; i += chunkSize - overlap) {
     const chunk = words.slice(i, i + chunkSize).join(" ");
     if (chunk.length > 10) chunks.push(chunk);
     if (i + chunkSize >= words.length) break;
   }
-
   return chunks;
 }
 
-// ============================================
-// Semantic search query → vector
-// ============================================
 export async function embedSearchQuery(query: string): Promise<number[]> {
   return generateEmbedding(query);
 }
