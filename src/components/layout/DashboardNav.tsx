@@ -17,8 +17,8 @@ export default function DashboardNav({ user }: { user: User }) {
   };
 
   const avatarUrl = user.user_metadata?.avatar_url;
-  const name = user.user_metadata?.full_name || user.email;
-  const initials = (name || "U").split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
+  const name = user.user_metadata?.full_name || user.email || "User";
+  const initials = name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
 
   const navLinks = [
     { href: "/dashboard", label: "Dokumen" },
@@ -26,25 +26,30 @@ export default function DashboardNav({ user }: { user: User }) {
   ];
 
   return (
-    <nav className="bg-white border-b border-gray-100 sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between gap-6">
+    <nav style={{ backgroundColor: "white", borderBottom: "1px solid #F0F0F0", position: "sticky", top: 0, zIndex: 50, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px", height: 56, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 24 }}>
         {/* Logo */}
-        <Link href="/dashboard" className="flex items-center gap-2.5 shrink-0">
-          <Image src="/Logo Clara.png" alt="CLARA" width={28} height={28} className="rounded-lg" />
-          <span className="font-bold text-[#1A1F2E] text-base tracking-tight">CLARA</span>
+        <Link href="/dashboard" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", flexShrink: 0 }}>
+          <Image src="/Logo Clara.png" alt="CLARA" width={30} height={30} style={{ borderRadius: 8 }} />
+          <span style={{ fontWeight: 700, color: "#1A1F2E", fontSize: 16, letterSpacing: "-0.3px" }}>CLARA</span>
         </Link>
 
-        {/* Nav */}
-        <div className="hidden sm:flex items-center gap-1 flex-1">
+        {/* Nav links */}
+        <div style={{ display: "flex", alignItems: "center", gap: 4, flex: 1 }}>
           {navLinks.map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                pathname === link.href
-                  ? "bg-[#0344D8]/8 text-[#0344D8]"
-                  : "text-gray-500 hover:text-gray-800 hover:bg-gray-100"
-              }`}
+              style={{
+                padding: "6px 14px",
+                borderRadius: 10,
+                fontSize: 14,
+                fontWeight: 500,
+                textDecoration: "none",
+                transition: "all 0.15s",
+                backgroundColor: pathname === link.href ? "rgba(3,68,216,0.08)" : "transparent",
+                color: pathname === link.href ? "#0344D8" : "#6B7280",
+              }}
             >
               {link.label}
             </Link>
@@ -52,20 +57,18 @@ export default function DashboardNav({ user }: { user: User }) {
         </div>
 
         {/* User */}
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="hidden sm:flex items-center gap-2">
-            {avatarUrl ? (
-              <Image src={avatarUrl} alt={name || ""} width={28} height={28} className="rounded-full" />
-            ) : (
-              <div className="w-7 h-7 rounded-full bg-[#0344D8] flex items-center justify-center text-white text-xs font-semibold">
-                {initials}
-              </div>
-            )}
-            <span className="text-sm text-gray-600 truncate max-w-[140px]">{name}</span>
-          </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+          <span style={{ fontSize: 13, color: "#6B7280", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+          {avatarUrl ? (
+            <Image src={avatarUrl} alt={name} width={30} height={30} style={{ borderRadius: "50%" }} />
+          ) : (
+            <div style={{ width: 30, height: 30, borderRadius: "50%", backgroundColor: "#0344D8", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 11, fontWeight: 700 }}>
+              {initials}
+            </div>
+          )}
           <button
             onClick={handleSignOut}
-            className="text-xs text-gray-400 hover:text-gray-700 border border-gray-200 hover:border-gray-300 px-3 py-1.5 rounded-lg transition-colors"
+            style={{ fontSize: 12, color: "#9CA3AF", border: "1px solid #E5E7EB", borderRadius: 8, padding: "6px 12px", backgroundColor: "transparent", cursor: "pointer", fontFamily: "'DM Sans', system-ui, sans-serif" }}
           >
             Keluar
           </button>

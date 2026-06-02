@@ -1,28 +1,21 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap');
 
 :root {
-  --primary: #0344D8;
-  --primary-hover: #387EE4;
-  --accent-lime: #D1EA2C;
-  --accent-amber: #FFC128;
-  --navy: #1A1F2E;
-  --gray-50: #F8F9FB;
-  --white: #FFFFFF;
-  --black: #000000;
+  --color-primary: #0344D8;
+  --color-primary-hover: #387EE4;
+  --color-lime: #D1EA2C;
+  --color-amber: #FFC128;
+  --color-navy: #1A1F2E;
+  --color-gray50: #F8F9FB;
 }
 
 * { box-sizing: border-box; }
 
-body {
-  font-family: 'DM Sans', system-ui, sans-serif;
-  background: var(--gray-50);
-  color: var(--black);
-}
+html { font-family: 'DM Sans', system-ui, -apple-system, sans-serif; }
 
-@layer utilities {
-  .text-primary { color: var(--primary); }
-  .bg-primary { background-color: var(--primary); }
-  .border-primary { border-color: var(--primary); }
+body {
+  font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }

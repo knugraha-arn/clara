@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, X, FolderOpen, FileText, LayoutGrid, List } from "lucide-react";
 import DocumentUpload from "@/components/documents/DocumentUpload";
 import DocumentCard from "@/components/documents/DocumentCard";
 import { CATEGORY_LABELS } from "@/lib/utils";
@@ -12,12 +11,25 @@ const CATEGORIES = [
   ...Object.entries(CATEGORY_LABELS).map(([value, label]) => ({ value, label })),
 ];
 
+const S = {
+  page: { fontFamily: "'DM Sans', system-ui, sans-serif" } as React.CSSProperties,
+  header: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 24 } as React.CSSProperties,
+  title: { fontWeight: 700, fontSize: 20, color: "#1A1F2E", margin: 0 } as React.CSSProperties,
+  subtitle: { fontSize: 13, color: "#9CA3AF", marginTop: 2 } as React.CSSProperties,
+  uploadBtn: { display: "flex", alignItems: "center", gap: 6, backgroundColor: "#0344D8", color: "white", border: "none", borderRadius: 12, padding: "9px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", flexShrink: 0, fontFamily: "'DM Sans', system-ui, sans-serif" } as React.CSSProperties,
+  closeBtn: { display: "flex", alignItems: "center", gap: 6, backgroundColor: "#F3F4F6", color: "#374151", border: "none", borderRadius: 12, padding: "9px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", flexShrink: 0, fontFamily: "'DM Sans', system-ui, sans-serif" } as React.CSSProperties,
+  card: { backgroundColor: "white", border: "1px solid #F0F0F0", borderRadius: 16, padding: 24, marginBottom: 24 } as React.CSSProperties,
+  filterWrap: { display: "flex", gap: 6, overflowX: "auto" as const, marginBottom: 20, paddingBottom: 2 },
+  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 } as React.CSSProperties,
+  empty: { textAlign: "center" as const, padding: "80px 0", color: "#9CA3AF" },
+  skeleton: { backgroundColor: "white", border: "1px solid #F0F0F0", borderRadius: 16, padding: 20, height: 130 } as React.CSSProperties,
+};
+
 export default function DashboardPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
   const [activeCategory, setActiveCategory] = useState("all");
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   const fetchDocuments = useCallback(async () => {
     setLoading(true);
@@ -37,104 +49,75 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div style={S.page}>
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+      <div style={S.header}>
         <div>
-          <h1 className="text-xl font-bold text-[#1A1F2E]">Dokumen</h1>
-          <p className="text-sm text-gray-400 mt-0.5">{documents.length} dokumen tersimpan</p>
+          <h1 style={S.title}>Dokumen</h1>
+          <p style={S.subtitle}>{documents.length} dokumen tersimpan</p>
         </div>
         <button
           onClick={() => setShowUpload(!showUpload)}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-sm transition-colors ${
-            showUpload
-              ? "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              : "bg-[#0344D8] hover:bg-[#387EE4] text-white"
-          }`}
+          style={showUpload ? S.closeBtn : S.uploadBtn}
         >
-          {showUpload ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-          {showUpload ? "Tutup" : "Upload"}
+          {showUpload ? "✕ Tutup" : "+ Upload"}
         </button>
       </div>
 
-      {/* Upload Panel */}
+      {/* Upload panel */}
       {showUpload && (
-        <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-          <div className="flex items-center gap-2 mb-5">
-            <div className="w-8 h-8 rounded-lg bg-[#0344D8]/10 flex items-center justify-center">
-              <FileText className="w-4 h-4 text-[#0344D8]" />
-            </div>
-            <h2 className="font-semibold text-[#1A1F2E]">Upload Dokumen Baru</h2>
-          </div>
+        <div style={S.card}>
+          <p style={{ fontWeight: 600, color: "#1A1F2E", marginBottom: 16, marginTop: 0, fontSize: 15 }}>Upload Dokumen Baru</p>
           <DocumentUpload onSuccess={() => { setShowUpload(false); fetchDocuments(); }} />
         </div>
       )}
 
-      {/* Filters + View Toggle */}
-      <div className="flex items-center gap-3">
-        <div className="flex gap-1.5 overflow-x-auto flex-1 pb-0.5 scrollbar-hide">
-          {CATEGORIES.map((cat) => (
-            <button
-              key={cat.value}
-              onClick={() => setActiveCategory(cat.value)}
-              className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                activeCategory === cat.value
-                  ? "bg-[#0344D8] text-white"
-                  : "bg-white text-gray-500 hover:bg-gray-100 border border-gray-200"
-              }`}
-            >
-              {cat.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-1 border border-gray-200 rounded-lg p-0.5 shrink-0 bg-white">
+      {/* Category filters */}
+      <div style={S.filterWrap}>
+        {CATEGORIES.map((cat) => (
           <button
-            onClick={() => setViewMode("grid")}
-            className={`p-1.5 rounded-md transition-colors ${viewMode === "grid" ? "bg-gray-100 text-gray-800" : "text-gray-400 hover:text-gray-600"}`}
+            key={cat.value}
+            onClick={() => setActiveCategory(cat.value)}
+            style={{
+              flexShrink: 0,
+              padding: "6px 14px",
+              borderRadius: 8,
+              fontSize: 12,
+              fontWeight: 600,
+              border: "1px solid",
+              cursor: "pointer",
+              fontFamily: "'DM Sans', system-ui, sans-serif",
+              backgroundColor: activeCategory === cat.value ? "#0344D8" : "white",
+              color: activeCategory === cat.value ? "white" : "#6B7280",
+              borderColor: activeCategory === cat.value ? "#0344D8" : "#E5E7EB",
+            }}
           >
-            <LayoutGrid className="w-3.5 h-3.5" />
+            {cat.label}
           </button>
-          <button
-            onClick={() => setViewMode("list")}
-            className={`p-1.5 rounded-md transition-colors ${viewMode === "list" ? "bg-gray-100 text-gray-800" : "text-gray-400 hover:text-gray-600"}`}
-          >
-            <List className="w-3.5 h-3.5" />
-          </button>
-        </div>
+        ))}
       </div>
 
-      {/* Documents */}
+      {/* Content */}
       {loading ? (
-        <div className={`grid gap-3 ${viewMode === "grid" ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" : "grid-cols-1"}`}>
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i} className="bg-white rounded-xl border border-gray-100 p-5 animate-pulse">
-              <div className="flex gap-3">
-                <div className="w-9 h-9 bg-gray-100 rounded-lg shrink-0" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-3.5 bg-gray-100 rounded w-3/4" />
-                  <div className="h-3 bg-gray-100 rounded w-full" />
-                  <div className="h-3 bg-gray-100 rounded w-1/2" />
-                </div>
-              </div>
-            </div>
+        <div style={S.grid}>
+          {[1,2,3,4,5,6].map((i) => (
+            <div key={i} style={{ ...S.skeleton, animation: "pulse 1.5s ease-in-out infinite" }} />
           ))}
         </div>
       ) : documents.length === 0 ? (
-        <div className="text-center py-24 space-y-3">
-          <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto">
-            <FolderOpen className="w-7 h-7 text-gray-400" />
-          </div>
-          <p className="font-semibold text-gray-500">Belum ada dokumen</p>
-          <p className="text-sm text-gray-400">Upload PDF pertama Anda untuk memulai</p>
+        <div style={S.empty}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>📂</div>
+          <p style={{ fontWeight: 600, color: "#6B7280", margin: 0 }}>Belum ada dokumen</p>
+          <p style={{ fontSize: 13, marginTop: 4 }}>Upload PDF pertama Anda untuk memulai</p>
           <button
             onClick={() => setShowUpload(true)}
-            className="mt-2 text-sm text-[#0344D8] hover:underline font-medium"
+            style={{ marginTop: 16, color: "#0344D8", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontSize: 14, fontFamily: "'DM Sans', system-ui, sans-serif" }}
           >
             Upload sekarang →
           </button>
         </div>
       ) : (
-        <div className={`grid gap-3 ${viewMode === "grid" ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" : "grid-cols-1"}`}>
+        <div style={S.grid}>
           {documents.map((doc) => (
             <DocumentCard key={doc.id} document={doc} onDelete={handleDelete} />
           ))}
