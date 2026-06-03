@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
   }
 
   // 2. SEMANTIC SEARCH — semua dokumen
-  const isConceptual = query.split(" ").length > 3;
+  const isConceptual = query.trim().length > 2; // AI semantic aktif untuk semua query > 2 karakter
   if (isConceptual) {
     try {
       const queryEmbedding = await embedSearchQuery(query);

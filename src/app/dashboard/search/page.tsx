@@ -41,7 +41,7 @@ export default function SearchPage() {
     }
   }, []);
 
-  const isAI = query.trim().split(" ").length > 3;
+  const isAI = query.trim().length > 2;
 
   return (
     <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
