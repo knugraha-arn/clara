@@ -11,10 +11,10 @@ export async function GET(request: NextRequest) {
   const limit = parseInt(searchParams.get("limit") || "50");
   const offset = parseInt(searchParams.get("offset") || "0");
 
+  // Semua dokumen — tidak filter per user_id
   let query = supabase
     .from("documents")
     .select("*")
-    .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -25,11 +25,10 @@ export async function GET(request: NextRequest) {
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Ambil kategori yang benar-benar ada (distinct)
+  // Distinct categories dari semua dokumen
   const { data: catData } = await supabase
     .from("documents")
     .select("category")
-    .eq("user_id", user.id)
     .eq("status", "ready");
 
   const activeCategories = [...new Set((catData || []).map((d: { category: string }) => d.category))];
@@ -47,11 +46,13 @@ export async function DELETE(request: NextRequest) {
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "ID diperlukan" }, { status: 400 });
 
+  // Cek dokumen ada, tapi tidak restrict ke user_id — admin bisa hapus semua
+  // Kalau mau restrict hanya uploader yang bisa hapus, uncomment baris .eq("user_id", user.id)
   const { data: doc } = await supabase
     .from("documents")
-    .select("file_path")
+    .select("file_path, user_id")
     .eq("id", id)
-    .eq("user_id", user.id)
+    // .eq("user_id", user.id) // uncomment untuk restrict ke uploader saja
     .single();
 
   if (!doc) return NextResponse.json({ error: "Dokumen tidak ditemukan" }, { status: 404 });

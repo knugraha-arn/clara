@@ -15,11 +15,10 @@ export async function GET(request: NextRequest) {
   const results: SearchResult[] = [];
   const seenIds = new Set<string>();
 
-  // --- 1. EXACT MATCH (always run first) ---
+  // 1. EXACT MATCH — semua dokumen
   const { data: exactDocs } = await supabase
     .from("documents")
     .select("*")
-    .eq("user_id", user.id)
     .eq("status", "ready")
     .or(`title.ilike.%${query}%,summary.ilike.%${query}%,extracted_text_page1.ilike.%${query}%`)
     .limit(5);
@@ -36,23 +35,19 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // --- 2. SEMANTIC SEARCH (for conceptual queries) ---
-  // Heuristik: jika query > 3 kata, gunakan semantic search
+  // 2. SEMANTIC SEARCH — semua dokumen
   const isConceptual = query.split(" ").length > 3;
-
   if (isConceptual) {
     try {
       const queryEmbedding = await embedSearchQuery(query);
 
-      const { data: semanticResults } = await supabase.rpc("search_documents_semantic", {
+      const { data: semanticResults } = await supabase.rpc("search_documents_semantic_all", {
         query_embedding: JSON.stringify(queryEmbedding),
-        user_id_filter: user.id,
         match_threshold: 0.4,
         match_count: 10,
       });
 
       if (semanticResults) {
-        // Get unique document IDs from semantic results
         const semanticDocIds = [...new Set(
           semanticResults.map((r: { document_id: string }) => r.document_id)
         )].filter((id) => !seenIds.has(id as string));
@@ -73,7 +68,7 @@ export async function GET(request: NextRequest) {
                 document: doc,
                 score: bestChunk?.similarity || 0.5,
                 snippet: bestChunk?.chunk_text?.slice(0, 200) || doc.summary || "",
-                match_type: seenIds.has(doc.id) ? "hybrid" : "semantic",
+                match_type: "semantic",
               });
             }
           }
@@ -81,14 +76,11 @@ export async function GET(request: NextRequest) {
       }
     } catch (error) {
       console.error("[Search] Semantic search error:", error);
-      // Graceful degradation — return exact results only
     }
   }
 
-  // Sort by score descending
   results.sort((a, b) => b.score - a.score);
 
-  // Log search history
   await supabase.from("search_history").insert({
     user_id: user.id,
     query,
@@ -103,7 +95,6 @@ function getSnippet(text: string, query: string, contextLength = 200): string {
   const lowerQuery = query.toLowerCase();
   const idx = lowerText.indexOf(lowerQuery);
   if (idx === -1) return text.slice(0, contextLength);
-
   const start = Math.max(0, idx - 80);
   const end = Math.min(text.length, idx + contextLength);
   return (start > 0 ? "..." : "") + text.slice(start, end) + (end < text.length ? "..." : "");
