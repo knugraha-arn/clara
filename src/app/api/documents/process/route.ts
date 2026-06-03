@@ -1,0 +1,157 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { analyzeDocumentPage1, generateEmbedding, chunkText } from "@/lib/gemini";
+import { logEvent } from "@/lib/audit";
+
+export const maxDuration = 300;
+export const dynamic = "force-dynamic";
+
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = await createClient();
+    const adminSupabase = await createAdminClient();
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { storagePath, fileName, fileSize, title, classificationOverride, overrideReason } = await request.json();
+    if (!storagePath) return NextResponse.json({ error: "storagePath diperlukan" }, { status: 400 });
+
+    const { data: profile } = await supabase.from("profiles").select("full_name, role").eq("id", user.id).single();
+
+    // 1. Create document record
+    const { data: doc, error: docError } = await supabase
+      .from("documents")
+      .insert({
+        user_id: user.id,
+        title: title || fileName.replace(".pdf", ""),
+        file_name: fileName,
+        file_path: storagePath,
+        file_size: fileSize,
+        mime_type: "application/pdf",
+        status: "processing",
+      })
+      .select()
+      .single();
+
+    if (docError || !doc) {
+      console.error("[Process] DB insert error:", docError);
+      return NextResponse.json({ error: "Gagal menyimpan dokumen" }, { status: 500 });
+    }
+
+    // 2. Download dari storage
+    const { data: fileData, error: downloadError } = await adminSupabase.storage
+      .from("documents").download(storagePath);
+
+    if (downloadError || !fileData) {
+      await supabase.from("documents").update({ status: "error" }).eq("id", doc.id);
+      return NextResponse.json({ error: "Gagal mengunduh file" }, { status: 500 });
+    }
+
+    // 3. Extract text
+    let extractedText = "";
+    let pageCount = 0;
+    try {
+      const { extractText } = await import("unpdf");
+      const arrayBuffer = await fileData.arrayBuffer();
+      const uint8 = new Uint8Array(arrayBuffer);
+      const result = await extractText(uint8, { mergePages: true });
+      extractedText = Array.isArray(result.text) ? result.text.join("\n") : (result.text || "");
+      pageCount = result.totalPages || 0;
+    } catch (pdfError) {
+      console.error("[Process] PDF extract error:", pdfError);
+    }
+
+    // 4. AI Analysis (kategori + klasifikasi sekaligus)
+    const textPage1 = extractedText.slice(0, 4000);
+    const aiResult = await analyzeDocumentPage1(textPage1 || `Nama file: ${fileName}`, fileName);
+
+    // 5. Tentukan klasifikasi final (override atau AI suggestion)
+    const finalClassification = classificationOverride || aiResult.classification;
+    const isOverridden = !!classificationOverride && classificationOverride !== aiResult.classification;
+
+    // 6. Update document
+    await supabase.from("documents").update({
+      category: aiResult.category,
+      category_confidence: aiResult.category_confidence,
+      summary: aiResult.summary,
+      extracted_text_page1: textPage1,
+      page_count: pageCount,
+      tags: aiResult.tags,
+      classification: finalClassification,
+      classification_ai_suggestion: aiResult.classification,
+      classification_confidence: aiResult.classification_confidence,
+      classification_overridden: isOverridden,
+      classification_override_reason: isOverridden ? (overrideReason || null) : null,
+      status: "processing",
+      updated_at: new Date().toISOString(),
+    }).eq("id", doc.id);
+
+    // 7. Embeddings
+    if (extractedText.length > 10) {
+      const chunks = chunkText(extractedText);
+      const embeddingPromises = chunks.slice(0, 20).map(async (chunk, index) => {
+        try {
+          const embedding = await generateEmbedding(chunk);
+          if (embedding.length > 0) {
+            return adminSupabase.from("document_embeddings").insert({
+              document_id: doc.id,
+              chunk_index: index,
+              chunk_text: chunk,
+              embedding: JSON.stringify(embedding),
+            });
+          }
+        } catch (e) {
+          console.error(`[Process] Embedding chunk ${index} error:`, e);
+        }
+      });
+      await Promise.allSettled(embeddingPromises);
+    }
+
+    // 8. Mark ready
+    await supabase.from("documents").update({
+      status: "ready",
+      updated_at: new Date().toISOString(),
+    }).eq("id", doc.id);
+
+    // 9. Log audit trail
+    await logEvent({
+      supabase: adminSupabase,
+      documentId: doc.id,
+      documentTitle: doc.title,
+      userId: user.id,
+      userEmail: user.email || "",
+      userName: profile?.full_name || undefined,
+      eventType: "uploaded",
+      metadata: {
+        category: aiResult.category,
+        classification: finalClassification,
+        classification_ai: aiResult.classification,
+        classification_overridden: isOverridden,
+        file_size: fileSize,
+        page_count: pageCount,
+      },
+      request,
+    });
+
+    return NextResponse.json({
+      success: true,
+      document: {
+        id: doc.id,
+        title: doc.title,
+        category: aiResult.category,
+        summary: aiResult.summary,
+        tags: aiResult.tags,
+        classification: finalClassification,
+        classification_ai_suggestion: aiResult.classification,
+        classification_confidence: aiResult.classification_confidence,
+        classification_overridden: isOverridden,
+        classification_reason: aiResult.classification_reason,
+      },
+    });
+
+  } catch (error) {
+    console.error("[Process] Unexpected error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}

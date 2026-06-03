@@ -1,19 +1,45 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Upload, FileText, Loader2, CheckCircle, AlertCircle } from "lucide-react";
-import { cn, formatFileSize } from "@/lib/utils";
-import type { UploadProgress } from "@/types";
+import { createClient } from "@/lib/supabase/client";
+import { generateStoragePath } from "@/lib/utils";
+import type { DocumentClassification } from "@/types";
+
+const CLASSIFICATION_CONFIG: Record<DocumentClassification, { label: string; color: string; bg: string; border: string; desc: string }> = {
+  public:       { label: "Public",       color: "#16A34A", bg: "#F0FDF4", border: "#BBF7D0", desc: "Boleh diketahui publik" },
+  internal:     { label: "Internal",     color: "#0344D8", bg: "#EEF2FF", border: "#C7D2FE", desc: "Khusus karyawan" },
+  confidential: { label: "Confidential", color: "#D97706", bg: "#FFFBEB", border: "#FDE68A", desc: "Terbatas, perlu tahu saja" },
+  restricted:   { label: "Restricted",   color: "#DC2626", bg: "#FEF2F2", border: "#FECACA", desc: "Sangat terbatas, board level" },
+};
+
+interface AiSuggestion {
+  classification: DocumentClassification;
+  classification_confidence: number;
+  classification_reason: string;
+  category: string;
+  summary: string;
+  tags: string[];
+}
 
 interface DocumentUploadProps {
   onSuccess?: () => void;
 }
 
+type Stage = "idle" | "uploading" | "analyzing" | "confirm" | "saving" | "done" | "error";
+
 export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
-  const [progress, setProgress] = useState<UploadProgress | null>(null);
+  const [stage, setStage] = useState<Stage>("idle");
+  const [progress, setProgress] = useState(0);
+  const [message, setMessage] = useState("");
+  const [aiSuggestion, setAiSuggestion] = useState<AiSuggestion | null>(null);
+  const [storagePath, setStoragePath] = useState("");
+  const [selectedClassification, setSelectedClassification] = useState<DocumentClassification>("internal");
+  const [overrideReason, setOverrideReason] = useState("");
+
+  const supabase = createClient();
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -35,135 +61,273 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
 
   const handleUpload = async () => {
     if (!selectedFile) return;
-
-    setProgress({ stage: "uploading", progress: 10, message: "Mengupload file..." });
-
     try {
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-      formData.append("title", title || selectedFile.name);
+      // 1. Upload ke Supabase Storage
+      setStage("uploading");
+      setProgress(20);
+      setMessage("Mengupload file ke storage...");
 
-      setProgress({ stage: "extracting", progress: 30, message: "Mengekstrak teks PDF..." });
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Tidak terautentikasi");
 
-      const res = await fetch("/api/documents/upload", {
+      const path = generateStoragePath(user.id, selectedFile.name);
+      const { error: uploadError } = await supabase.storage
+        .from("documents")
+        .upload(path, selectedFile, { contentType: "application/pdf", upsert: false });
+
+      if (uploadError) throw new Error(`Upload gagal: ${uploadError.message}`);
+      setStoragePath(path);
+      setProgress(50);
+
+      // 2. AI Analysis
+      setStage("analyzing");
+      setMessage("AI sedang menganalisis dokumen dan menentukan klasifikasi...");
+      setProgress(70);
+
+      const res = await fetch("/api/documents/process", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storagePath: path,
+          fileName: selectedFile.name,
+          fileSize: selectedFile.size,
+          title: title || selectedFile.name.replace(".pdf", ""),
+          classificationOverride: null, // belum ada override
+        }),
       });
-
-      setProgress({ stage: "analyzing", progress: 60, message: "AI sedang menganalisis halaman 1..." });
 
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Proses gagal");
 
-      if (!res.ok) throw new Error(data.error || "Upload gagal");
-
-      setProgress({ stage: "embedding", progress: 85, message: "Membuat vector embedding untuk pencarian..." });
-
-      // Simulasi delay embedding (sudah diproses di server)
-      await new Promise((r) => setTimeout(r, 800));
-
-      setProgress({ stage: "done", progress: 100, message: `Dokumen "${data.document.title}" berhasil diproses!` });
-
-      setTimeout(() => {
-        setSelectedFile(null);
-        setTitle("");
-        setProgress(null);
-        onSuccess?.();
-      }, 2000);
+      // 3. Tampilkan AI suggestion untuk konfirmasi
+      setAiSuggestion({
+        classification: data.document.classification_ai_suggestion || data.document.classification,
+        classification_confidence: data.document.classification_confidence,
+        classification_reason: data.document.classification_reason,
+        category: data.document.category,
+        summary: data.document.summary,
+        tags: data.document.tags,
+      });
+      setSelectedClassification(data.document.classification_ai_suggestion || data.document.classification);
+      setProgress(100);
+      setStage("confirm");
 
     } catch (err) {
-      setProgress({
-        stage: "error",
-        progress: 0,
-        message: err instanceof Error ? err.message : "Terjadi kesalahan",
-      });
+      setStage("error");
+      setMessage(err instanceof Error ? err.message : "Terjadi kesalahan");
     }
   };
 
+  const handleConfirm = async () => {
+    if (!aiSuggestion || !storagePath || !selectedFile) return;
+    const isOverride = selectedClassification !== aiSuggestion.classification;
+
+    try {
+      setStage("saving");
+      setMessage("Menyimpan klasifikasi...");
+
+      // Update klasifikasi jika ada override
+      if (isOverride) {
+        await fetch("/api/documents/update-classification", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            storagePath,
+            classification: selectedClassification,
+            overrideReason,
+          }),
+        });
+      }
+
+      setStage("done");
+      setMessage("Dokumen berhasil diproses!");
+      setTimeout(() => {
+        setSelectedFile(null);
+        setTitle("");
+        setStage("idle");
+        setProgress(0);
+        setAiSuggestion(null);
+        setStoragePath("");
+        setOverrideReason("");
+        onSuccess?.();
+      }, 1500);
+
+    } catch (err) {
+      setStage("error");
+      setMessage(err instanceof Error ? err.message : "Gagal menyimpan");
+    }
+  };
+
+  const reset = () => {
+    setSelectedFile(null);
+    setTitle("");
+    setStage("idle");
+    setProgress(0);
+    setMessage("");
+    setAiSuggestion(null);
+    setStoragePath("");
+    setOverrideReason("");
+  };
+
+  const isOverride = aiSuggestion && selectedClassification !== aiSuggestion.classification;
+
   return (
-    <div className="space-y-4">
-      {/* Drop Zone */}
-      <div
-        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-        onDragLeave={() => setIsDragging(false)}
-        onDrop={handleDrop}
-        className={cn(
-          "border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer",
-          isDragging ? "border-[#0344D8] bg-blue-50" : "border-gray-200 hover:border-[#387EE4] bg-white",
-          selectedFile && "border-[#0344D8] bg-blue-50/50"
-        )}
-        onClick={() => document.getElementById("file-input")?.click()}
-      >
-        <input
-          id="file-input"
-          type="file"
-          accept="application/pdf"
-          className="hidden"
-          onChange={handleFileSelect}
-        />
+    <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+      {/* Drop zone */}
+      {stage === "idle" && (
+        <>
+          <div
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+            onClick={() => document.getElementById("file-input-clara")?.click()}
+            style={{ border: `2px dashed ${isDragging || selectedFile ? "#0344D8" : "#E5E7EB"}`, borderRadius: 12, padding: "24px 20px", textAlign: "center", cursor: "pointer", backgroundColor: isDragging || selectedFile ? "rgba(3,68,216,0.03)" : "#FAFAFA", transition: "all 0.15s" }}
+          >
+            <input id="file-input-clara" type="file" accept="application/pdf" style={{ display: "none" }} onChange={handleFileSelect} />
+            {selectedFile ? (
+              <div>
+                <p style={{ fontSize: 24, margin: "0 0 6px" }}>📄</p>
+                <p style={{ fontWeight: 600, color: "#1A1F2E", fontSize: 13, margin: "0 0 2px" }}>{selectedFile.name}</p>
+                <p style={{ fontSize: 12, color: "#9CA3AF", margin: 0 }}>{(selectedFile.size / (1024 * 1024)).toFixed(1)} MB</p>
+              </div>
+            ) : (
+              <div>
+                <p style={{ fontSize: 24, margin: "0 0 6px" }}>☁️</p>
+                <p style={{ fontWeight: 600, color: "#374151", fontSize: 13, margin: "0 0 4px" }}>Drag & drop PDF di sini</p>
+                <p style={{ fontSize: 12, color: "#9CA3AF", margin: 0 }}>atau klik untuk memilih · maks. 100MB</p>
+              </div>
+            )}
+          </div>
 
-        {selectedFile ? (
-          <div className="flex items-center justify-center gap-3">
-            <FileText className="w-8 h-8 text-[#0344D8]" />
-            <div className="text-left">
-              <p className="font-semibold text-[#1A1F2E]">{selectedFile.name}</p>
-              <p className="text-sm text-gray-500">{formatFileSize(selectedFile.size)}</p>
+          {selectedFile && (
+            <div style={{ marginTop: 12 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", display: "block", marginBottom: 4 }}>Judul Dokumen</label>
+              <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Judul dokumen..."
+                style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 10, padding: "9px 14px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />
+              <button onClick={handleUpload}
+                style={{ width: "100%", marginTop: 10, backgroundColor: "#0344D8", color: "white", border: "none", borderRadius: 10, padding: "11px 0", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                Upload & Analisis dengan AI
+              </button>
             </div>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <Upload className="w-8 h-8 text-gray-400 mx-auto" />
-            <p className="font-medium text-gray-700">Drag & drop PDF di sini</p>
-            <p className="text-sm text-gray-400">atau klik untuk memilih file (maks. 100MB)</p>
-          </div>
-        )}
-      </div>
-
-      {/* Title Input */}
-      {selectedFile && !progress && (
-        <div className="space-y-1">
-          <label className="text-sm font-medium text-gray-700">Judul Dokumen</label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Judul dokumen..."
-            className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0344D8] focus:border-transparent"
-          />
-        </div>
+          )}
+        </>
       )}
 
       {/* Progress */}
-      {progress && (
-        <div className="bg-white rounded-xl p-4 border border-gray-100 space-y-3">
-          <div className="flex items-center gap-3">
-            {progress.stage === "done" ? (
-              <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
-            ) : progress.stage === "error" ? (
-              <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
-            ) : (
-              <Loader2 className="w-5 h-5 text-[#0344D8] animate-spin shrink-0" />
-            )}
-            <p className="text-sm font-medium text-gray-700">{progress.message}</p>
+      {(stage === "uploading" || stage === "analyzing" || stage === "saving") && (
+        <div style={{ backgroundColor: "#F8F9FB", borderRadius: 12, padding: "16px 16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <span style={{ fontSize: 18 }}>⏳</span>
+            <p style={{ fontSize: 13, color: "#374151", margin: 0, fontWeight: 500 }}>{message}</p>
           </div>
-          {progress.stage !== "error" && (
-            <div className="w-full bg-gray-100 rounded-full h-1.5">
-              <div
-                className="bg-[#0344D8] h-1.5 rounded-full transition-all duration-500"
-                style={{ width: `${progress.progress}%` }}
-              />
-            </div>
-          )}
+          <div style={{ height: 4, backgroundColor: "#E5E7EB", borderRadius: 4 }}>
+            <div style={{ height: 4, backgroundColor: "#0344D8", borderRadius: 4, width: `${progress}%`, transition: "width 0.5s ease" }} />
+          </div>
         </div>
       )}
 
-      {/* Upload Button */}
-      {selectedFile && !progress && (
-        <button
-          onClick={handleUpload}
-          className="w-full bg-[#0344D8] hover:bg-[#387EE4] text-white py-3 rounded-xl font-semibold transition-colors"
-        >
-          Upload & Analisis dengan AI
-        </button>
+      {/* AI Suggestion + Override */}
+      {stage === "confirm" && aiSuggestion && (
+        <div style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 14, overflow: "hidden" }}>
+          {/* AI Result header */}
+          <div style={{ backgroundColor: "#F8F9FB", padding: "14px 16px", borderBottom: "1px solid #EFEFEF" }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: "#1A1F2E", margin: "0 0 4px" }}>✅ Analisis AI selesai</p>
+            <p style={{ fontSize: 12, color: "#9CA3AF", margin: 0 }}>{aiSuggestion.summary}</p>
+          </div>
+
+          <div style={{ padding: "16px" }}>
+            {/* AI Classification suggestion */}
+            <div style={{ marginBottom: 14 }}>
+              <p style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Klasifikasi AI ({Math.round(aiSuggestion.classification_confidence * 100)}% yakin)
+              </p>
+              <div style={{ backgroundColor: CLASSIFICATION_CONFIG[aiSuggestion.classification].bg, border: `1px solid ${CLASSIFICATION_CONFIG[aiSuggestion.classification].border}`, borderRadius: 10, padding: "10px 14px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: CLASSIFICATION_CONFIG[aiSuggestion.classification].color }}>
+                    {CLASSIFICATION_CONFIG[aiSuggestion.classification].label}
+                  </span>
+                  <span style={{ fontSize: 12, color: "#6B7280" }}>— {aiSuggestion.classification_reason}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Override option */}
+            <div style={{ marginBottom: 14 }}>
+              <p style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Konfirmasi atau ubah klasifikasi
+              </p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                {(Object.keys(CLASSIFICATION_CONFIG) as DocumentClassification[]).map((cls) => {
+                  const cfg = CLASSIFICATION_CONFIG[cls];
+                  const isSelected = selectedClassification === cls;
+                  return (
+                    <button key={cls} onClick={() => setSelectedClassification(cls)}
+                      style={{ padding: "10px 12px", borderRadius: 10, border: `2px solid ${isSelected ? cfg.color : "#E5E7EB"}`, backgroundColor: isSelected ? cfg.bg : "white", cursor: "pointer", textAlign: "left", fontFamily: "inherit", transition: "all 0.15s" }}>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: cfg.color, margin: "0 0 2px" }}>{cfg.label}</p>
+                      <p style={{ fontSize: 11, color: "#9CA3AF", margin: 0 }}>{cfg.desc}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Override reason */}
+            {isOverride && (
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "#D97706", display: "block", marginBottom: 4 }}>
+                  ⚠️ Alasan override (akan dicatat di audit trail)
+                </label>
+                <input type="text" value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)}
+                  placeholder="Contoh: Dokumen bersifat publik, bukan internal..."
+                  style={{ width: "100%", border: "1px solid #FDE68A", borderRadius: 8, padding: "8px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", backgroundColor: "#FFFBEB" }} />
+              </div>
+            )}
+
+            {/* Tags */}
+            {aiSuggestion.tags?.length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <p style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Tags</p>
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                  {aiSuggestion.tags.map((tag) => (
+                    <span key={tag} style={{ fontSize: 11, backgroundColor: "#F3F4F6", color: "#6B7280", padding: "3px 8px", borderRadius: 5 }}>{tag}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={handleConfirm}
+                style={{ flex: 1, backgroundColor: "#0344D8", color: "white", border: "none", borderRadius: 10, padding: "11px 0", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                {isOverride ? `Simpan sebagai ${CLASSIFICATION_CONFIG[selectedClassification].label}` : "Konfirmasi & Simpan"}
+              </button>
+              <button onClick={reset}
+                style={{ padding: "11px 16px", backgroundColor: "#F3F4F6", color: "#6B7280", border: "none", borderRadius: 10, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Done */}
+      {stage === "done" && (
+        <div style={{ backgroundColor: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 12, padding: "14px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 18 }}>✅</span>
+          <p style={{ fontSize: 13, color: "#16A34A", margin: 0, fontWeight: 500 }}>{message}</p>
+        </div>
+      )}
+
+      {/* Error */}
+      {stage === "error" && (
+        <div style={{ backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 12, padding: "14px 16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+            <span style={{ fontSize: 18 }}>❌</span>
+            <p style={{ fontSize: 13, color: "#DC2626", margin: 0, fontWeight: 500 }}>{message}</p>
+          </div>
+          <button onClick={reset} style={{ fontSize: 12, color: "#0344D8", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>
+            Coba lagi →
+          </button>
+        </div>
       )}
     </div>
   );

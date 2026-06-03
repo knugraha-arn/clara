@@ -26,6 +26,7 @@ const ROLE_LABELS: Record<string, { label: string; color: string; bg: string }> 
 const NAV = [
   { href: "/dashboard", icon: "📄", label: "Dokumen" },
   { href: "/dashboard/search", icon: "🔍", label: "Pencarian AI" },
+  { href: "/dashboard/audit", icon: "📋", label: "Audit Trail", roles: ["super_admin", "admin", "auditor"] },
 ];
 
 export default function DashboardShell({ children, profile }: { children: React.ReactNode; profile: UserProfile }) {
@@ -56,7 +57,7 @@ export default function DashboardShell({ children, profile }: { children: React.
           </div>
 
           <nav style={{ flex: 1, padding: "12px 10px" }}>
-            {NAV.map((item) => {
+            {NAV.filter(item => !item.roles || item.roles.includes(profile.role)).map((item) => {
               const active = pathname === item.href;
               return (
                 <Link key={item.href} href={item.href}

@@ -1,34 +1,40 @@
 import OpenAI from "openai";
-import type { AiAnalysisResult, DocumentCategory } from "@/types";
+import type { AiAnalysisResult, DocumentCategory, DocumentClassification } from "@/types";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// ============================================
-// Analisis dokumen halaman 1
-// ============================================
 export async function analyzeDocumentPage1(
   extractedText: string,
   fileName: string
 ): Promise<AiAnalysisResult> {
-  const prompt = `Kamu adalah sistem analisis dokumen untuk sebuah organisasi Indonesia.
-Analisis teks berikut yang diambil dari halaman pertama sebuah dokumen PDF.
+  const prompt = `Kamu adalah sistem analisis dokumen untuk organisasi Indonesia.
+Analisis dokumen PDF berikut dan berikan hasil dalam JSON.
 
 NAMA FILE: ${fileName}
-TEKS HALAMAN 1:
+KONTEN DOKUMEN:
 ---
 ${extractedText.slice(0, 3000)}
 ---
 
-Berikan analisis dalam format JSON berikut (HANYA JSON, tanpa penjelasan lain):
+Berikan HANYA JSON berikut tanpa penjelasan lain:
 {
-  "summary": "Ringkasan singkat isi dokumen dalam 2-3 kalimat bahasa Indonesia",
-  "category": "salah satu dari: surat_masuk | surat_keluar | kontrak | memo | laporan | kebijakan | undangan | pengumuman | lainnya",
+  "summary": "Ringkasan 2-3 kalimat bahasa Indonesia",
+  "category": "surat_masuk | surat_keluar | kontrak | memo | laporan | kebijakan | undangan | pengumuman | lainnya",
   "category_confidence": 0.0,
-  "tags": ["keyword1", "keyword2"],
-  "document_date": null,
-  "sender": null,
-  "recipient": null
-}`;
+  "classification": "public | internal | confidential | restricted",
+  "classification_confidence": 0.0,
+  "classification_reason": "Alasan singkat klasifikasi dalam 1 kalimat",
+  "tags": ["keyword1", "keyword2", "keyword3"],
+  "document_date": "YYYY-MM-DD atau null",
+  "sender": "nama pengirim atau null",
+  "recipient": "nama penerima atau null"
+}
+
+Panduan klasifikasi:
+- public: informasi umum, tidak sensitif, boleh diketahui publik
+- internal: untuk karyawan saja, memo, SOP, laporan operasional
+- confidential: kontrak, data keuangan, data pelanggan, perjanjian bisnis
+- restricted: NDA, data akuisisi, rahasia dagang, informasi board level`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -45,9 +51,11 @@ Berikan analisis dalam format JSON berikut (HANYA JSON, tanpa penjelasan lain):
       "surat_masuk", "surat_keluar", "kontrak", "memo",
       "laporan", "kebijakan", "undangan", "pengumuman", "lainnya"
     ];
-    if (!validCategories.includes(parsed.category)) {
-      parsed.category = "lainnya";
-    }
+    if (!validCategories.includes(parsed.category)) parsed.category = "lainnya";
+
+    const validClassifications: DocumentClassification[] = ["public", "internal", "confidential", "restricted"];
+    if (!validClassifications.includes(parsed.classification)) parsed.classification = "internal";
+
     return parsed;
   } catch (error) {
     console.error("[OpenAI] analyzeDocumentPage1 error:", error);
@@ -55,6 +63,9 @@ Berikan analisis dalam format JSON berikut (HANYA JSON, tanpa penjelasan lain):
       summary: "Gagal menganalisis dokumen secara otomatis.",
       category: "lainnya",
       category_confidence: 0,
+      classification: "internal",
+      classification_confidence: 0,
+      classification_reason: "Default klasifikasi",
       tags: [],
       document_date: null,
       sender: null,
@@ -63,9 +74,6 @@ Berikan analisis dalam format JSON berikut (HANYA JSON, tanpa penjelasan lain):
   }
 }
 
-// ============================================
-// Generate embedding (dimension: 1536)
-// ============================================
 export async function generateEmbedding(text: string): Promise<number[]> {
   try {
     const response = await openai.embeddings.create({
