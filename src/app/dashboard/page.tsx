@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import DocumentUpload from "@/components/documents/DocumentUpload";
+import { useRole } from "@/components/layout/DashboardShell";
 import { CATEGORY_LABELS } from "@/lib/utils";
 import type { Document, DocumentCategory } from "@/types";
 
@@ -28,10 +29,13 @@ function formatSize(b: number) {
 
 type SortKey = "created_at" | "title" | "category" | "file_size";
 type SortDir = "asc" | "desc";
-
 const PAGE_SIZE_OPTIONS = [10, 20, 30];
 
 export default function DashboardPage() {
+  const role = useRole();
+  const canUpload = ["contributor", "admin", "super_admin"].includes(role);
+  const canDelete = ["contributor", "admin", "super_admin"].includes(role);
+
   const [documents, setDocuments] = useState<Document[]>([]);
   const [activeCategories, setActiveCategories] = useState<DocumentCategory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,19 +58,11 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchDocuments("all"); }, [fetchDocuments]);
 
-  const handleCategoryClick = (cat: string) => {
-    setActiveCategory(cat);
-    setPage(1);
-    fetchDocuments(cat);
-  };
+  const handleCategoryClick = (cat: string) => { setActiveCategory(cat); setPage(1); fetchDocuments(cat); };
 
   const handleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir(d => d === "asc" ? "desc" : "asc");
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("asc"); }
     setPage(1);
   };
 
@@ -85,7 +81,6 @@ export default function DashboardPage() {
     if (data.url) window.open(data.url, "_blank");
   };
 
-  // Sort
   const sorted = [...documents].sort((a, b) => {
     let va: string | number = a[sortKey] ?? "";
     let vb: string | number = b[sortKey] ?? "";
@@ -96,10 +91,8 @@ export default function DashboardPage() {
     return 0;
   });
 
-  // Paginate
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const paginated = sorted.slice((page - 1) * pageSize, page * pageSize);
-
   const today = new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(new Date());
 
   const statCards = [
@@ -112,18 +105,13 @@ export default function DashboardPage() {
     })),
   ].slice(0, 4);
 
-  const SortIcon = ({ col }: { col: SortKey }) => (
-    <span style={{ marginLeft: 4, opacity: sortKey === col ? 1 : 0.3, fontSize: 10 }}>
-      {sortKey === col ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
-    </span>
-  );
-
   const ColHeader = ({ label, col }: { label: string; col: SortKey }) => (
-    <span
-      onClick={() => handleSort(col)}
-      style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center" }}
-    >
-      {label}<SortIcon col={col} />
+    <span onClick={() => handleSort(col)}
+      style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 3 }}>
+      {label}
+      <span style={{ opacity: sortKey === col ? 1 : 0.3, fontSize: 10 }}>
+        {sortKey === col ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
+      </span>
     </span>
   );
 
@@ -135,18 +123,18 @@ export default function DashboardPage() {
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <span style={{ fontSize: 13, color: "#9CA3AF" }}>{today}</span>
           <Image src="/arranet-logo-black.png" alt="Arranetwork" width={90} height={22} style={{ opacity: 0.35 }} />
-          <button
-            onClick={() => setShowUpload(!showUpload)}
-            style={{ display: "flex", alignItems: "center", gap: 6, backgroundColor: showUpload ? "#F3F4F6" : "#0344D8", color: showUpload ? "#374151" : "white", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
-          >
-            {showUpload ? "✕ Tutup" : "+ Upload"}
-          </button>
+          {canUpload && (
+            <button onClick={() => setShowUpload(!showUpload)}
+              style={{ display: "flex", alignItems: "center", gap: 6, backgroundColor: showUpload ? "#F3F4F6" : "#0344D8", color: showUpload ? "#374151" : "white", border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+              {showUpload ? "✕ Tutup" : "+ Upload"}
+            </button>
+          )}
         </div>
       </div>
 
       <div style={{ padding: "20px 28px" }}>
         {/* Upload panel */}
-        {showUpload && (
+        {showUpload && canUpload && (
           <div style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 14, padding: 20, marginBottom: 20 }}>
             <p style={{ fontWeight: 600, color: "#1A1F2E", margin: "0 0 14px", fontSize: 14 }}>Upload Dokumen Baru</p>
             <DocumentUpload onSuccess={() => { setShowUpload(false); fetchDocuments("all"); setActiveCategory("all"); setPage(1); }} />
@@ -166,7 +154,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Filter + Page size */}
+        {/* Filter + page size */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
             <button onClick={() => handleCategoryClick("all")}
@@ -180,8 +168,6 @@ export default function DashboardPage() {
               </button>
             ))}
           </div>
-
-          {/* Page size selector */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             <span style={{ fontSize: 12, color: "#9CA3AF" }}>Tampilkan</span>
             {PAGE_SIZE_OPTIONS.map((n) => (
@@ -195,8 +181,7 @@ export default function DashboardPage() {
 
         {/* Document list */}
         <div style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 14, overflow: "hidden" }}>
-          {/* Header */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 130px 100px 80px 70px", gap: 12, padding: "10px 16px", borderBottom: "1px solid #F5F5F5", backgroundColor: "#FAFAFA" }}>
+          <div style={{ display: "grid", gridTemplateColumns: `1fr 130px 100px 80px ${canDelete ? "70px" : "40px"}`, gap: 12, padding: "10px 16px", borderBottom: "1px solid #F5F5F5", backgroundColor: "#FAFAFA" }}>
             <ColHeader label="Dokumen" col="title" />
             <ColHeader label="Kategori" col="category" />
             <ColHeader label="Tanggal" col="created_at" />
@@ -212,7 +197,7 @@ export default function DashboardPage() {
               <p style={{ fontWeight: 600, color: "#6B7280", margin: 0 }}>
                 {activeCategory === "all" ? "Belum ada dokumen" : `Tidak ada dokumen kategori ${CATEGORY_LABELS[activeCategory as DocumentCategory] || activeCategory}`}
               </p>
-              {activeCategory === "all" && (
+              {activeCategory === "all" && canUpload && (
                 <button onClick={() => setShowUpload(true)}
                   style={{ marginTop: 12, color: "#0344D8", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontSize: 14, fontFamily: "inherit" }}>
                   Upload sekarang →
@@ -224,16 +209,13 @@ export default function DashboardPage() {
               const catStyle = CAT_COLORS[doc.category] || CAT_COLORS.lainnya;
               return (
                 <div key={doc.id}
-                  style={{ display: "grid", gridTemplateColumns: "1fr 130px 100px 80px 70px", gap: 12, padding: "13px 16px", borderBottom: i < paginated.length - 1 ? "1px solid #F5F5F5" : "none", backgroundColor: "white", alignItems: "flex-start" }}
+                  style={{ display: "grid", gridTemplateColumns: `1fr 130px 100px 80px ${canDelete ? "70px" : "40px"}`, gap: 12, padding: "13px 16px", borderBottom: i < paginated.length - 1 ? "1px solid #F5F5F5" : "none", backgroundColor: "white", alignItems: "flex-start" }}
                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#FAFBFF"}
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "white"}
                 >
-                  {/* Title + full summary + tags */}
                   <div style={{ minWidth: 0 }}>
                     <p style={{ fontSize: 13, fontWeight: 600, color: "#1A1F2E", margin: "0 0 4px" }}>{doc.title}</p>
-                    {doc.summary && (
-                      <p style={{ fontSize: 12, color: "#6B7280", margin: "0 0 5px", lineHeight: 1.5 }}>{doc.summary}</p>
-                    )}
+                    {doc.summary && <p style={{ fontSize: 12, color: "#6B7280", margin: "0 0 5px", lineHeight: 1.5 }}>{doc.summary}</p>}
                     {doc.tags?.length > 0 && (
                       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                         {doc.tags.slice(0, 4).map((tag) => (
@@ -252,8 +234,10 @@ export default function DashboardPage() {
                   <div style={{ display: "flex", gap: 4, paddingTop: 2 }}>
                     <button onClick={() => handleDownload(doc.id)} title="Download"
                       style={{ width: 28, height: 28, borderRadius: 7, border: "1px solid #E5E7EB", backgroundColor: "white", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center" }}>↓</button>
-                    <button onClick={() => handleDelete(doc.id)} title="Hapus"
-                      style={{ width: 28, height: 28, borderRadius: 7, border: "1px solid #FEE2E2", backgroundColor: "white", cursor: "pointer", fontSize: 13, color: "#EF4444", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+                    {canDelete && (
+                      <button onClick={() => handleDelete(doc.id)} title="Hapus"
+                        style={{ width: 28, height: 28, borderRadius: 7, border: "1px solid #FEE2E2", backgroundColor: "white", cursor: "pointer", fontSize: 13, color: "#EF4444", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+                    )}
                   </div>
                 </div>
               );
@@ -280,7 +264,7 @@ export default function DashboardPage() {
                   return acc;
                 }, [])
                 .map((p, i) => p === "..." ? (
-                  <span key={`ellipsis-${i}`} style={{ padding: "5px 8px", fontSize: 12, color: "#9CA3AF" }}>…</span>
+                  <span key={`e-${i}`} style={{ padding: "5px 8px", fontSize: 12, color: "#9CA3AF" }}>…</span>
                 ) : (
                   <button key={p} onClick={() => setPage(p as number)}
                     style={{ padding: "5px 10px", borderRadius: 7, border: "1px solid", fontSize: 12, fontFamily: "inherit", cursor: "pointer", backgroundColor: page === p ? "#0344D8" : "white", color: page === p ? "white" : "#374151", borderColor: page === p ? "#0344D8" : "#E5E7EB", fontWeight: page === p ? 600 : 400 }}>
