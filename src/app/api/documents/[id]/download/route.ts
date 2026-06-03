@@ -22,17 +22,22 @@ export async function GET(
 
   if (!doc) return NextResponse.json({ error: "Dokumen tidak ditemukan" }, { status: 404 });
 
-  const { data: signedUrl, error } = await adminSupabase.storage
+  // Download file dari storage
+  const { data: fileData, error } = await adminSupabase.storage
     .from("documents")
-    .createSignedUrl(doc.file_path, 60);
+    .download(doc.file_path);
 
-  if (error || !signedUrl) {
-    return NextResponse.json({ error: "Gagal membuat link download" }, { status: 500 });
+  if (error || !fileData) {
+    return NextResponse.json({ error: "Gagal mengunduh file" }, { status: 500 });
   }
 
-  const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", user.id).single();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name")
+    .eq("id", user.id)
+    .single();
 
-  // Log download
+  // Log audit — hanya untuk force download
   await logEvent({
     supabase: adminSupabase,
     documentId: id,
@@ -41,9 +46,17 @@ export async function GET(
     userEmail: user.email || "",
     userName: profile?.full_name || undefined,
     eventType: "downloaded",
-    metadata: { classification: doc.classification },
+    metadata: { classification: doc.classification, file_name: doc.file_name },
     request,
   });
 
-  return NextResponse.json({ url: signedUrl.signedUrl, fileName: doc.file_name });
+  // Force download dengan nama file asli
+  const arrayBuffer = await fileData.arrayBuffer();
+  return new NextResponse(arrayBuffer, {
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${encodeURIComponent(doc.file_name)}"`,
+      "Content-Length": arrayBuffer.byteLength.toString(),
+    },
+  });
 }

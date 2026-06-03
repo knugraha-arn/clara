@@ -91,3 +91,8 @@ export interface AiAnalysisResult {
   sender: string | null;
   recipient: string | null;
 }
+
+// Extended document type with uploader info (dari API join)
+export interface DocumentWithUploader extends Document {
+  uploader_name: string;
+}

@@ -11,7 +11,6 @@ export async function GET(request: NextRequest) {
   const limit = parseInt(searchParams.get("limit") || "50");
   const offset = parseInt(searchParams.get("offset") || "0");
 
-  // Semua dokumen — tidak filter per user_id
   let query = supabase
     .from("documents")
     .select("*")
@@ -22,10 +21,26 @@ export async function GET(request: NextRequest) {
     query = query.eq("category", category);
   }
 
-  const { data, error } = await query;
+  const { data: documents, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Distinct categories dari semua dokumen
+  // Ambil nama uploader untuk semua dokumen
+  const userIds = [...new Set((documents || []).map((d: { user_id: string }) => d.user_id))];
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, full_name, email")
+    .in("id", userIds);
+
+  const profileMap = Object.fromEntries(
+    (profiles || []).map((p: { id: string; full_name: string; email: string }) => [p.id, p.full_name || p.email])
+  );
+
+  const documentsWithUploader = (documents || []).map((doc: { user_id: string }) => ({
+    ...doc,
+    uploader_name: profileMap[doc.user_id] || "Unknown",
+  }));
+
+  // Active categories
   const { data: catData } = await supabase
     .from("documents")
     .select("category")
@@ -33,7 +48,7 @@ export async function GET(request: NextRequest) {
 
   const activeCategories = [...new Set((catData || []).map((d: { category: string }) => d.category))];
 
-  return NextResponse.json({ documents: data, activeCategories });
+  return NextResponse.json({ documents: documentsWithUploader, activeCategories });
 }
 
 export async function DELETE(request: NextRequest) {
@@ -46,19 +61,15 @@ export async function DELETE(request: NextRequest) {
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "ID diperlukan" }, { status: 400 });
 
-  // Cek dokumen ada, tapi tidak restrict ke user_id — admin bisa hapus semua
-  // Kalau mau restrict hanya uploader yang bisa hapus, uncomment baris .eq("user_id", user.id)
   const { data: doc } = await supabase
     .from("documents")
-    .select("file_path, user_id")
+    .select("file_path, user_id, title")
     .eq("id", id)
-    // .eq("user_id", user.id) // uncomment untuk restrict ke uploader saja
     .single();
 
   if (!doc) return NextResponse.json({ error: "Dokumen tidak ditemukan" }, { status: 404 });
 
   await adminSupabase.storage.from("documents").remove([doc.file_path]);
-
   const { error } = await supabase.from("documents").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
