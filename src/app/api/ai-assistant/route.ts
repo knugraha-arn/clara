@@ -14,8 +14,8 @@ const DAILY_LIMITS: Record<string, number> = {
   super_admin: 999999,
 };
 
+// GET — cek usage hari ini
 export async function GET() {
-  // Ambil usage hari ini
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -23,20 +23,17 @@ export async function GET() {
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   const role = profile?.role || "auditor";
   const limit = DAILY_LIMITS[role] || 20;
+  const isUnlimited = role === "super_admin";
 
   const today = new Date().toISOString().split("T")[0];
   const { data: usage } = await supabase
-    .from("ai_usage")
-    .select("count")
-    .eq("user_id", user.id)
-    .eq("usage_date", today)
-    .single();
+    .from("ai_usage").select("count").eq("user_id", user.id).eq("usage_date", today).single();
 
   const used = usage?.count || 0;
-
-  return NextResponse.json({ used, limit, remaining: Math.max(0, limit - used) });
+  return NextResponse.json({ used, limit, remaining: isUnlimited ? 999999 : Math.max(0, limit - used), isUnlimited });
 }
 
+// POST — kirim pertanyaan
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -45,20 +42,17 @@ export async function POST(request: NextRequest) {
   const { data: profile } = await supabase.from("profiles").select("role, full_name").eq("id", user.id).single();
   const userRole = profile?.role || "auditor";
   const limit = DAILY_LIMITS[userRole] || 20;
+  const isUnlimited = userRole === "super_admin";
 
-  // Cek usage hari ini
+  // Cek usage
   const today = new Date().toISOString().split("T")[0];
   const { data: usage } = await supabase
-    .from("ai_usage")
-    .select("count")
-    .eq("user_id", user.id)
-    .eq("usage_date", today)
-    .single();
+    .from("ai_usage").select("count").eq("user_id", user.id).eq("usage_date", today).single();
 
   const used = usage?.count || 0;
-  if (used >= limit) {
+  if (!isUnlimited && used >= limit) {
     return NextResponse.json({
-      error: `Batas harian tercapai (${limit} pertanyaan). Reset besok.`,
+      error: `Batas harian tercapai (${limit} pertanyaan). Reset besok pukul 00:00.`,
       limitReached: true,
     }, { status: 429 });
   }
@@ -80,92 +74,134 @@ export async function POST(request: NextRequest) {
     ? ["public", "internal", "confidential"]
     : ["public", "internal"];
 
-  // Semantic search untuk konteks
+  // 1. Semantic search — ambil dokumen relevan
   let documentContext = "";
+  let foundDocs: { title: string; category: string; classification: string }[] = [];
+
   try {
     const queryEmbedding = await embedSearchQuery(question);
     const { data: semanticResults } = await supabase.rpc("search_documents_semantic_all", {
       query_embedding: JSON.stringify(queryEmbedding),
-      match_threshold: 0.3,
-      match_count: 8,
+      match_threshold: 0.25, // lebih rendah untuk tangkap lebih banyak
+      match_count: 10,
     });
 
     if (semanticResults?.length > 0) {
       const docIds = [...new Set(semanticResults.map((r: { document_id: string }) => r.document_id))];
       const { data: docs } = await supabase
         .from("documents")
-        .select("id, title, summary, category, classification, retention_date, created_at, tags")
+        .select("id, title, summary, category, classification, retention_date, created_at, tags, file_name")
         .in("id", docIds)
-        .in("classification", allowedClassifications);
+        .in("classification", allowedClassifications)
+        .eq("status", "ready");
 
       if (docs && docs.length > 0) {
-        const docMap = Object.fromEntries(docs.map((d: {
-          id: string; title: string; summary: string | null; category: string;
-          classification: string; retention_date: string | null; created_at: string; tags: string[];
-        }) => [d.id, d]));
+        foundDocs = docs;
+        type DocType = { id: string; title: string; summary: string | null; category: string; classification: string; retention_date: string | null; created_at: string; tags: string[]; file_name: string };
+        const docMap = Object.fromEntries(docs.map((d: DocType) => [d.id, d]));
 
         const relevantChunks = semanticResults
           .filter((r: { document_id: string }) => docMap[r.document_id])
-          .slice(0, 5);
+          .slice(0, 6);
 
-        documentContext = relevantChunks.map((r: { document_id: string; chunk_text: string }) => {
-          const doc = docMap[r.document_id];
+        documentContext = relevantChunks.map((r: { document_id: string; chunk_text: string; similarity: number }) => {
+          const doc = docMap[r.document_id] as DocType;
           if (!doc) return "";
-          return `--- DOKUMEN: "${doc.title}" ---
-Kategori: ${doc.category} | Klasifikasi: ${doc.classification}
-Retensi: ${doc.retention_date || "tidak diset"}
-Ringkasan: ${doc.summary || "-"}
-Konten: ${r.chunk_text}`;
-        }).filter(Boolean).join("\n\n");
+          return `[DOKUMEN: "${doc.title}"]
+- Nama file: ${doc.file_name}
+- Kategori: ${doc.category} | Klasifikasi: ${doc.classification}
+- Retensi: ${doc.retention_date ? new Date(doc.retention_date).toLocaleDateString("id-ID") : "tidak diset"}
+- Ringkasan: ${doc.summary || "tidak ada ringkasan"}
+- Tags: ${doc.tags?.join(", ") || "-"}
+- Konten relevan: ${r.chunk_text.slice(0, 400)}
+- Similarity score: ${Math.round(r.similarity * 100)}%`;
+        }).filter(Boolean).join("\n\n---\n\n");
       }
     }
   } catch (e) {
-    console.error("[AI] Search error:", e);
+    console.error("[AI] Semantic search error:", e);
   }
 
-  // Metadata statistik
-  const { data: allDocs } = await supabase
+  // 2. Juga cari exact match berdasarkan keyword dari pertanyaan
+  let exactContext = "";
+  try {
+    const { data: exactDocs } = await supabase
+      .from("documents")
+      .select("id, title, summary, category, classification, retention_date, created_at, tags")
+      .in("classification", allowedClassifications)
+      .eq("status", "ready")
+      .or(`title.ilike.%${question.slice(0, 50)}%,summary.ilike.%${question.slice(0, 50)}%`)
+      .limit(3);
+
+    if (exactDocs && exactDocs.length > 0) {
+      const newDocs = (exactDocs as { id: string; title: string; category: string; classification: string; retention_date: string | null; summary: string | null }[]).filter(d => !foundDocs.find(f => f.title === d.title));
+      if (newDocs.length > 0) {
+        exactContext = "\n\nDOKUMEN DITEMUKAN VIA KEYWORD:\n" + newDocs.map((d: {
+          title: string; category: string; classification: string; retention_date: string | null; summary: string | null;
+        }) => `[${d.title}] — ${d.category} | ${d.classification} | Retensi: ${d.retention_date ? new Date(d.retention_date).toLocaleDateString("id-ID") : "tidak diset"} | ${d.summary || ""}`).join("\n");
+      }
+    }
+  } catch (e) {
+    console.error("[AI] Exact search error:", e);
+  }
+
+  // 3. Metadata real-time
+  type AllDocType = { id: string; title: string; category: string; classification: string; retention_date: string | null; created_at: string; is_scanned: boolean; tags: string[] };
+  const { data: allDocsRaw } = await supabase
     .from("documents")
-    .select("title, category, classification, retention_date, created_at, is_scanned")
+    .select("id, title, category, classification, retention_date, created_at, is_scanned, tags")
     .in("classification", allowedClassifications)
     .eq("status", "ready");
+  const allDocs = (allDocsRaw || []) as AllDocType[];
 
-  const metaContext = `
-RINGKASAN ARSIP CLARA (data real-time):
-- Total dokumen: ${allDocs?.length || 0}
-- Per kategori: ${JSON.stringify((allDocs || []).reduce((acc: Record<string, number>, d: { category: string }) => { acc[d.category] = (acc[d.category] || 0) + 1; return acc; }, {}))}
-- Dokumen scan: ${(allDocs || []).filter((d: { is_scanned: boolean }) => d.is_scanned).length}
-- Expired bulan ini: ${(allDocs || []).filter((d: { retention_date: string | null }) => {
+  const totalDocs = allDocs.length;
+  const byCategory = allDocs.reduce((acc: Record<string, number>, d: AllDocType) => {
+    acc[d.category] = (acc[d.category] || 0) + 1; return acc;
+  }, {});
+  const expiringDocs = allDocs.filter((d: AllDocType) => {
     if (!d.retention_date) return false;
     const diff = (new Date(d.retention_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
     return diff >= 0 && diff <= 30;
-  }).length}`;
+  });
 
-  const systemPrompt = `Kamu adalah CLARA AI Assistant — asisten manajemen dokumen arsip untuk organisasi Arranetwork.
+  const metaContext = `DATA ARSIP CLARA (real-time):
+- Total dokumen tersedia: ${totalDocs}
+- Per kategori: ${JSON.stringify(byCategory)}
+- Dokumen akan expired dalam 30 hari: ${expiringDocs.length}${expiringDocs.length > 0 ? " (" + expiringDocs.slice(0, 3).map((d: AllDocType) => d.title).join(", ") + ")" : ""}
+- Dokumen scan: ${allDocs.filter((d: AllDocType) => d.is_scanned).length}`;
 
-IDENTITAS:
-- Nama: CLARA AI Assistant
-- Basis data: Arsip dokumen CLARA milik Arranetwork
-- Bahasa: Indonesia (profesional dan ringkas)
+  const systemPrompt = `Kamu adalah CLARA AI Assistant — asisten manajemen dokumen arsip untuk organisasi Arranetwork Indonesia.
+
+IDENTITAS & PERAN:
+- Kamu membantu user menemukan, memahami, dan menganalisis dokumen di arsip CLARA
+- Selalu jawab dalam Bahasa Indonesia yang profesional dan ringkas
+- Jika menemukan dokumen relevan, sebutkan nama dokumennya secara spesifik
 
 YANG BISA KAMU LAKUKAN ✅:
 - Menjawab pertanyaan tentang dokumen di arsip CLARA
-- Memberikan informasi metadata dokumen (kategori, klasifikasi, tanggal, uploader)
-- Informasi retensi & status dokumen
-- Statistik arsip
-- Rekomendasi tindakan (dokumen expired, perlu review, dll)
-- Pencarian konseptual isi dokumen
+- Memberikan info metadata (kategori, klasifikasi, tanggal, retensi)
+- Statistik dan rangkuman arsip
+- Rekomendasi tindakan (expired, perlu review, dll)
+- Pencarian dan analisis isi dokumen
 
-YANG TIDAK BISA KAMU LAKUKAN ❌:
-- Menjawab pertanyaan di luar konteks arsip CLARA
+YANG TIDAK BISA ❌:
+- Menjawab di luar konteks arsip CLARA
 - Generate kode atau artefak
 - Mengakses internet atau data eksternal
 - Menampilkan isi verbatim dokumen Confidential/Restricted
-- Mengakses dokumen di luar hak akses role: ${allowedClassifications.join(", ")}
+
+AKSES: Klasifikasi yang bisa diakses user ini: ${allowedClassifications.join(", ")}
 
 ${metaContext}
 
-${documentContext ? `DOKUMEN RELEVAN:\n${documentContext}` : "Tidak ada dokumen yang spesifik relevan, jawab berdasarkan metadata arsip di atas."}`;
+${documentContext ? `DOKUMEN RELEVAN DITEMUKAN (berdasarkan semantic search):\n${documentContext}` : "Tidak ada dokumen yang spesifik relevan berdasarkan semantic search."}
+${exactContext}
+
+INSTRUKSI PENTING:
+- Jika ada dokumen relevan di atas, sebutkan nama dokumennya secara eksplisit dalam jawaban
+- Jika tidak ada dokumen yang relevan, katakan dengan jujur dan sarankan user untuk mencoba kata kunci berbeda
+- Untuk pertanyaan tentang expired/retensi, gunakan data di atas
+- Jawaban singkat dan to the point, maksimal 3-4 paragraf`;
 
   const messages = [
     { role: "system" as const, content: systemPrompt },
@@ -179,21 +215,22 @@ ${documentContext ? `DOKUMEN RELEVAN:\n${documentContext}` : "Tidak ada dokumen 
   const response = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     messages,
-    temperature: 0.3,
-    max_tokens: 800,
+    temperature: 0.2,
+    max_tokens: 600,
   });
 
   const answer = response.choices[0].message.content || "Maaf, tidak dapat memproses pertanyaan ini.";
 
   await supabase.from("search_history").insert({
     user_id: user.id,
-    query: `[AI] ${question}`,
-    result_count: 1,
+    query: "[AI] " + question,
+    result_count: foundDocs.length,
   });
 
   return NextResponse.json({
     answer,
-    hasContext: !!documentContext,
-    usage: { used: used + 1, limit, remaining: Math.max(0, limit - used - 1) },
+    hasContext: !!documentContext || !!exactContext,
+    docsFound: foundDocs.length,
+    usage: { used: used + 1, limit, remaining: isUnlimited ? 999999 : Math.max(0, limit - used - 1), isUnlimited },
   });
 }

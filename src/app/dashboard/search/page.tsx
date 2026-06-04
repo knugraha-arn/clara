@@ -156,7 +156,8 @@ export default function SearchPage() {
                 </div>
                 {!isUnlimited && (
                   <div style={{ marginLeft: "auto", fontSize: 12, color: "#9CA3AF", textAlign: "right" }}>
-                    <span style={{ fontWeight: 600, color: usage.remaining < 5 ? "#DC2626" : "#1A1F2E" }}>{usage.remaining}</span> pertanyaan tersisa hari ini
+                    <span style={{ fontWeight: 700, color: usage.remaining < 5 ? "#DC2626" : "#1A1F2E", fontSize: 14 }}>{usage.used}/{usage.limit}</span>
+                    <span style={{ marginLeft: 4 }}>pertanyaan digunakan</span>
                   </div>
                 )}
               </div>
@@ -258,10 +259,10 @@ export default function SearchPage() {
               {!isUnlimited && (
                 <div style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 12, padding: "14px" }}>
                   <p style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", margin: "0 0 8px" }}>Penggunaan Hari Ini</p>
-                  <p style={{ fontSize: 26, fontWeight: 700, color: usage.remaining < 5 ? "#DC2626" : "#1A1F2E", margin: "0 0 2px" }}>
-                    {usage.used} <span style={{ fontSize: 14, color: "#9CA3AF", fontWeight: 400 }}>/ {usage.limit}</span>
+                  <p style={{ fontSize: 30, fontWeight: 800, color: usage.remaining < 5 ? "#DC2626" : "#1A1F2E", margin: "0 0 2px", letterSpacing: "-1px" }}>
+                    {usage.used} <span style={{ fontSize: 16, color: "#9CA3AF", fontWeight: 400 }}>/ {usage.limit}</span>
                   </p>
-                  <p style={{ fontSize: 11, color: "#9CA3AF", margin: "0 0 8px" }}>pertanyaan digunakan</p>
+                  <p style={{ fontSize: 11, color: "#9CA3AF", margin: "0 0 8px" }}>pertanyaan digunakan hari ini</p>
                   <div style={{ height: 4, backgroundColor: "#F3F4F6", borderRadius: 4 }}>
                     <div style={{ height: 4, backgroundColor: usagePct > 80 ? "#DC2626" : "#0344D8", borderRadius: 4, width: `${Math.min(usagePct, 100)}%`, transition: "width 0.3s ease" }} />
                   </div>

@@ -29,13 +29,14 @@ interface AiSuggestion {
   summary: string;
   tags: string[];
   is_scanned: boolean;
+  documentId: string; // ID dokumen yang baru diupload
 }
 
 interface DocumentUploadProps {
   onSuccess?: () => void;
 }
 
-type Stage = "idle" | "uploading" | "analyzing" | "confirm" | "saving" | "done" | "error";
+type Stage = "idle" | "uploading" | "analyzing" | "checking" | "confirm" | "saving" | "done" | "error";
 
 export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
@@ -70,12 +71,21 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
     }
   };
 
+  // Hapus dokumen yang belum dikonfirmasi
+  const cancelAndDelete = async (documentId: string) => {
+    try {
+      await fetch(`/api/documents?id=${documentId}`, { method: "DELETE" });
+    } catch (e) {
+      console.error("Failed to delete cancelled doc:", e);
+    }
+  };
+
   const handleUpload = async () => {
     if (!selectedFile) return;
     try {
       // 1. Upload ke Supabase Storage
       setStage("uploading");
-      setProgress(20);
+      setProgress(15);
       setMessage("Mengupload file ke storage...");
 
       const { data: { user } } = await supabase.auth.getUser();
@@ -88,12 +98,12 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
 
       if (uploadError) throw new Error(`Upload gagal: ${uploadError.message}`);
       setStoragePath(path);
-      setProgress(50);
+      setProgress(40);
 
       // 2. AI Analysis
       setStage("analyzing");
-      setMessage("AI sedang menganalisis dokumen dan menentukan klasifikasi...");
-      setProgress(70);
+      setMessage("AI sedang menganalisis dokumen...");
+      setProgress(60);
 
       const res = await fetch("/api/documents/process", {
         method: "POST",
@@ -103,14 +113,36 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
           fileName: selectedFile.name,
           fileSize: selectedFile.size,
           title: title || selectedFile.name.replace(".pdf", ""),
-          classificationOverride: null, // belum ada override
+          classificationOverride: null,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Proses gagal");
 
-      // 3. Tampilkan AI suggestion untuk konfirmasi
+      const documentId = data.document.id;
+      setProgress(80);
+
+      // 3. Cek duplikat — tunggu embedding selesai
+      setStage("checking");
+      setMessage("Memeriksa duplikat dokumen...");
+      await new Promise(r => setTimeout(r, 2000)); // tunggu 2 detik embedding selesai
+
+      let foundDuplicates: DuplicateDoc[] = [];
+      try {
+        const dupRes = await fetch("/api/documents/check-duplicate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ documentId }),
+        });
+        const dupData = await dupRes.json();
+        foundDuplicates = dupData.duplicates || [];
+      } catch {
+        foundDuplicates = [];
+      }
+
+      setProgress(100);
+      setDuplicates(foundDuplicates);
       setAiSuggestion({
         classification: data.document.classification_ai_suggestion || data.document.classification,
         classification_confidence: data.document.classification_confidence,
@@ -119,21 +151,9 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
         summary: data.document.summary,
         tags: data.document.tags,
         is_scanned: data.document.is_scanned || false,
+        documentId, // simpan ID untuk keperluan cancel
       });
       setSelectedClassification(data.document.classification_ai_suggestion || data.document.classification);
-
-      // Cek duplikat
-      try {
-        const dupRes = await fetch("/api/documents/check-duplicate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ documentId: data.document.id }),
-        });
-        const dupData = await dupRes.json();
-        setDuplicates(dupData.duplicates || []);
-      } catch { setDuplicates([]); }
-
-      setProgress(100);
       setStage("confirm");
 
     } catch (err) {
@@ -143,14 +163,13 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
   };
 
   const handleConfirm = async () => {
-    if (!aiSuggestion || !storagePath || !selectedFile) return;
+    if (!aiSuggestion) return;
     const isOverride = selectedClassification !== aiSuggestion.classification;
 
     try {
       setStage("saving");
       setMessage("Menyimpan klasifikasi...");
 
-      // Update klasifikasi jika ada override
       if (isOverride) {
         await fetch("/api/documents/update-classification", {
           method: "POST",
@@ -165,7 +184,7 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
 
       setStage("done");
       setMessage("Dokumen berhasil diproses!");
-      setPendingDocId(null); // Dokumen confirmed, jangan dihapus jika reset
+
       setTimeout(() => {
         setSelectedFile(null);
         setTitle("");
@@ -184,16 +203,10 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
     }
   };
 
-  const [pendingDocId, setPendingDocId] = useState<string | null>(null);
-
-  const reset = async () => {
-    // Hapus dokumen dari DB & storage jika user batalkan setelah upload
-    if (pendingDocId) {
-      try {
-        await fetch(`/api/documents?id=${pendingDocId}`, { method: "DELETE" });
-      } catch (e) {
-        console.error("Failed to delete cancelled doc:", e);
-      }
+  const handleCancel = async () => {
+    // Hapus dokumen dari DB & storage jika sudah diproses
+    if (aiSuggestion?.documentId) {
+      await cancelAndDelete(aiSuggestion.documentId);
     }
     setSelectedFile(null);
     setTitle("");
@@ -204,10 +217,23 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
     setStoragePath("");
     setOverrideReason("");
     setDuplicates([]);
-    setPendingDocId(null);
   };
 
   const isOverride = aiSuggestion && selectedClassification !== aiSuggestion.classification;
+
+  const stageMessages: Partial<Record<Stage, string>> = {
+    uploading: message,
+    analyzing: message,
+    checking: message,
+    saving: message,
+  };
+
+  const stageProgress: Partial<Record<Stage, number>> = {
+    uploading: progress,
+    analyzing: progress,
+    checking: progress,
+    saving: 95,
+  };
 
   return (
     <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
@@ -219,7 +245,7 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
             onDragLeave={() => setIsDragging(false)}
             onDrop={handleDrop}
             onClick={() => document.getElementById("file-input-clara")?.click()}
-            style={{ border: `2px dashed ${isDragging || selectedFile ? "#0344D8" : "#E5E7EB"}`, borderRadius: 12, padding: "24px 20px", textAlign: "center", cursor: "pointer", backgroundColor: isDragging || selectedFile ? "rgba(3,68,216,0.03)" : "#FAFAFA", transition: "all 0.15s" }}
+            style={{ border: `2px dashed ${isDragging || selectedFile ? "#0344D8" : "#E5E7EB"}`, borderRadius: 12, padding: "24px 20px", textAlign: "center", cursor: "pointer", backgroundColor: isDragging || selectedFile ? "rgba(3,68,216,0.03)" : "#FAFAFA" }}
           >
             <input id="file-input-clara" type="file" accept="application/pdf" style={{ display: "none" }} onChange={handleFileSelect} />
             {selectedFile ? (
@@ -252,63 +278,37 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
       )}
 
       {/* Progress */}
-      {(stage === "uploading" || stage === "analyzing" || stage === "saving") && (
-        <div style={{ backgroundColor: "#F8F9FB", borderRadius: 12, padding: "16px 16px" }}>
+      {(stage === "uploading" || stage === "analyzing" || stage === "checking" || stage === "saving") && (
+        <div style={{ backgroundColor: "#F8F9FB", borderRadius: 12, padding: "16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
             <span style={{ fontSize: 18 }}>⏳</span>
-            <p style={{ fontSize: 13, color: "#374151", margin: 0, fontWeight: 500 }}>{message}</p>
+            <p style={{ fontSize: 13, color: "#374151", margin: 0, fontWeight: 500 }}>{stageMessages[stage]}</p>
           </div>
           <div style={{ height: 4, backgroundColor: "#E5E7EB", borderRadius: 4 }}>
-            <div style={{ height: 4, backgroundColor: "#0344D8", borderRadius: 4, width: `${progress}%`, transition: "width 0.5s ease" }} />
+            <div style={{ height: 4, backgroundColor: "#0344D8", borderRadius: 4, width: `${stageProgress[stage] || 0}%`, transition: "width 0.5s ease" }} />
           </div>
         </div>
       )}
 
-      {/* AI Suggestion + Override */}
+      {/* Confirmation panel */}
       {stage === "confirm" && aiSuggestion && (
         <div style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 14, overflow: "hidden" }}>
-          {/* AI Result header */}
+          {/* Header */}
           <div style={{ backgroundColor: "#F8F9FB", padding: "14px 16px", borderBottom: "1px solid #EFEFEF" }}>
-            <p style={{ fontSize: 13, fontWeight: 600, color: "#1A1F2E", margin: "0 0 4px" }}>✅ Analisis AI selesai</p>
+            <p style={{ fontSize: 13, fontWeight: 600, color: "#1A1F2E", margin: "0 0 3px" }}>✅ Analisis AI selesai</p>
             <p style={{ fontSize: 12, color: "#9CA3AF", margin: 0 }}>{aiSuggestion.summary}</p>
           </div>
 
-          <div style={{ padding: "16px" }}>
-            {/* Scan warning */}
-            {aiSuggestion.is_scanned && (
-              <div style={{ marginBottom: 14, backgroundColor: "#FEF2F2", border: "2px solid #FECACA", borderRadius: 10, padding: "14px 16px" }}>
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                  <span style={{ fontSize: 22, flexShrink: 0 }}>📷</span>
-                  <div>
-                    <p style={{ fontSize: 13, fontWeight: 700, color: "#DC2626", margin: "0 0 6px" }}>
-                      Dokumen Scan — Klasifikasi Tidak Terdeteksi
-                    </p>
-                    <p style={{ fontSize: 12, color: "#7F1D1D", margin: "0 0 8px", lineHeight: 1.6 }}>
-                      AI tidak dapat membaca isi dokumen ini karena merupakan hasil scan foto. Klasifikasi otomatis <strong>tidak dapat dilakukan</strong> — dokumen ini telah di-set ke <strong>Confidential</strong> sebagai default keamanan.
-                    </p>
-                    <div style={{ backgroundColor: "#FEE2E2", borderRadius: 8, padding: "8px 12px", display: "flex", alignItems: "flex-start", gap: 6 }}>
-                      <span style={{ fontSize: 14, flexShrink: 0 }}>⚠️</span>
-                      <p style={{ fontSize: 12, fontWeight: 600, color: "#991B1B", margin: 0, lineHeight: 1.5 }}>
-                        Anda <u>wajib menentukan klasifikasi yang tepat</u> sebelum menyimpan. Pilih klasifikasi di bawah berdasarkan isi dokumen yang Anda ketahui.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+          <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
 
-          {/* Duplikat warning */}
+            {/* Duplikat warning */}
             {duplicates.length > 0 && (
-              <div style={{ marginBottom: 14, backgroundColor: "#FFF7ED", border: "2px solid #FED7AA", borderRadius: 10, padding: "14px 16px" }}>
+              <div style={{ backgroundColor: "#FFF7ED", border: "2px solid #FED7AA", borderRadius: 10, padding: "14px 16px" }}>
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
                   <span style={{ fontSize: 20, flexShrink: 0 }}>⚠️</span>
                   <div>
-                    <p style={{ fontSize: 13, fontWeight: 700, color: "#C2410C", margin: "0 0 4px" }}>
-                      Kemungkinan Duplikat Terdeteksi
-                    </p>
-                    <p style={{ fontSize: 12, color: "#7C2D12", margin: 0 }}>
-                      Dokumen ini mirip dengan {duplicates.length} dokumen yang sudah ada di arsip.
-                    </p>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#C2410C", margin: "0 0 3px" }}>Kemungkinan Duplikat Terdeteksi</p>
+                    <p style={{ fontSize: 12, color: "#7C2D12", margin: 0 }}>Dokumen ini mirip dengan {duplicates.length} dokumen yang sudah ada.</p>
                   </div>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -316,37 +316,57 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
                     <div key={dup.id} style={{ backgroundColor: "white", border: "1px solid #FED7AA", borderRadius: 8, padding: "8px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                       <div style={{ minWidth: 0 }}>
                         <p style={{ fontSize: 12, fontWeight: 600, color: "#1A1F2E", margin: "0 0 2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{dup.title}</p>
-                        <p style={{ fontSize: 11, color: "#9CA3AF", margin: 0 }}>{dup.classification} · {new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" }).format(new Date(dup.created_at))}</p>
+                        <p style={{ fontSize: 11, color: "#9CA3AF", margin: 0 }}>
+                          {dup.classification} · {new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" }).format(new Date(dup.created_at))}
+                        </p>
                       </div>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: dup.similarity >= 95 ? "#DC2626" : "#D97706", flexShrink: 0, marginLeft: 12 }}>{dup.similarity}%</span>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: dup.similarity >= 95 ? "#DC2626" : "#D97706", flexShrink: 0, marginLeft: 12 }}>{dup.similarity}%</span>
                     </div>
                   ))}
                 </div>
                 <p style={{ fontSize: 11, color: "#7C2D12", margin: "10px 0 0", fontStyle: "italic" }}>
-                  Anda tetap bisa menyimpan dokumen ini jika memang berbeda dari yang sudah ada.
+                  Tetap bisa disimpan jika memang berbeda. Atau tekan Batal untuk membatalkan.
                 </p>
               </div>
             )}
 
-          {/* AI Classification suggestion */}
-            <div style={{ marginBottom: 14 }}>
-              <p style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Klasifikasi AI ({Math.round(aiSuggestion.classification_confidence * 100)}% yakin)
-              </p>
-              <div style={{ backgroundColor: CLASSIFICATION_CONFIG[aiSuggestion.classification].bg, border: `1px solid ${CLASSIFICATION_CONFIG[aiSuggestion.classification].border}`, borderRadius: 10, padding: "10px 14px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: CLASSIFICATION_CONFIG[aiSuggestion.classification].color }}>
-                    {CLASSIFICATION_CONFIG[aiSuggestion.classification].label}
-                  </span>
-                  <span style={{ fontSize: 12, color: "#6B7280" }}>— {aiSuggestion.classification_reason}</span>
+            {/* Scan warning */}
+            {aiSuggestion.is_scanned && (
+              <div style={{ backgroundColor: "#FEF2F2", border: "2px solid #FECACA", borderRadius: 10, padding: "14px 16px" }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 8 }}>
+                  <span style={{ fontSize: 22, flexShrink: 0 }}>📷</span>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#DC2626", margin: "0 0 6px" }}>Dokumen Scan — Klasifikasi Tidak Terdeteksi</p>
+                    <p style={{ fontSize: 12, color: "#7F1D1D", margin: "0 0 8px", lineHeight: 1.6 }}>
+                      AI tidak dapat membaca isi dokumen. Default ke <strong>Confidential</strong> — wajib review dan pilih klasifikasi yang tepat.
+                    </p>
+                    <div style={{ backgroundColor: "#FEE2E2", borderRadius: 8, padding: "7px 12px" }}>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: "#991B1B", margin: 0 }}>
+                        ⚠️ Pilih klasifikasi yang sesuai di bawah sebelum menyimpan
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
-            {/* Override option */}
-            <div style={{ marginBottom: 14 }}>
-              <p style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Konfirmasi atau ubah klasifikasi
+            {/* AI classification suggestion */}
+            {!aiSuggestion.is_scanned && (
+              <div>
+                <p style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Klasifikasi AI ({Math.round(aiSuggestion.classification_confidence * 100)}% yakin)
+                </p>
+                <div style={{ backgroundColor: CLASSIFICATION_CONFIG[aiSuggestion.classification].bg, border: `1px solid ${CLASSIFICATION_CONFIG[aiSuggestion.classification].border}`, borderRadius: 10, padding: "10px 14px" }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: CLASSIFICATION_CONFIG[aiSuggestion.classification].color }}>{CLASSIFICATION_CONFIG[aiSuggestion.classification].label}</span>
+                  <span style={{ fontSize: 12, color: "#6B7280", marginLeft: 8 }}>— {aiSuggestion.classification_reason}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Classification selector */}
+            <div>
+              <p style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                {aiSuggestion.is_scanned ? "Pilih klasifikasi" : "Konfirmasi atau ubah"}
               </p>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
                 {(Object.keys(CLASSIFICATION_CONFIG) as DocumentClassification[]).map((cls) => {
@@ -354,7 +374,7 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
                   const isSelected = selectedClassification === cls;
                   return (
                     <button key={cls} onClick={() => setSelectedClassification(cls)}
-                      style={{ padding: "10px 12px", borderRadius: 10, border: `2px solid ${isSelected ? cfg.color : "#E5E7EB"}`, backgroundColor: isSelected ? cfg.bg : "white", cursor: "pointer", textAlign: "left", fontFamily: "inherit", transition: "all 0.15s" }}>
+                      style={{ padding: "10px 12px", borderRadius: 10, border: `2px solid ${isSelected ? cfg.color : "#E5E7EB"}`, backgroundColor: isSelected ? cfg.bg : "white", cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
                       <p style={{ fontSize: 13, fontWeight: 600, color: cfg.color, margin: "0 0 2px" }}>{cfg.label}</p>
                       <p style={{ fontSize: 11, color: "#9CA3AF", margin: 0 }}>{cfg.desc}</p>
                     </button>
@@ -365,34 +385,42 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
 
             {/* Override reason */}
             {isOverride && (
-              <div style={{ marginBottom: 14 }}>
+              <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: "#D97706", display: "block", marginBottom: 4 }}>
-                  ⚠️ Alasan override (akan dicatat di audit trail)
+                  ⚠️ Alasan override (dicatat di audit trail)
                 </label>
                 <input type="text" value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)}
-                  placeholder="Contoh: Dokumen bersifat publik, bukan internal..."
+                  placeholder="Alasan mengubah klasifikasi..."
                   style={{ width: "100%", border: "1px solid #FDE68A", borderRadius: 8, padding: "8px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", backgroundColor: "#FFFBEB" }} />
               </div>
             )}
 
             {/* Tags */}
             {aiSuggestion.tags?.length > 0 && (
-              <div style={{ marginBottom: 14 }}>
-                <p style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Tags</p>
+              <div>
+                <p style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Tags</p>
                 <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                  {aiSuggestion.tags.map((tag) => (
+                  {aiSuggestion.tags.map(tag => (
                     <span key={tag} style={{ fontSize: 11, backgroundColor: "#F3F4F6", color: "#6B7280", padding: "3px 8px", borderRadius: 5 }}>{tag}</span>
                   ))}
                 </div>
               </div>
             )}
 
+            {/* Scan reminder */}
+            {aiSuggestion.is_scanned && selectedClassification === "confidential" && (
+              <p style={{ fontSize: 11, color: "#DC2626", textAlign: "center", margin: 0, fontWeight: 500 }}>
+                ⚠️ Pastikan Confidential adalah klasifikasi yang tepat
+              </p>
+            )}
+
+            {/* Action buttons */}
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={handleConfirm}
                 style={{ flex: 1, backgroundColor: "#0344D8", color: "white", border: "none", borderRadius: 10, padding: "11px 0", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
                 {isOverride ? `Simpan sebagai ${CLASSIFICATION_CONFIG[selectedClassification].label}` : "Konfirmasi & Simpan"}
               </button>
-              <button onClick={reset}
+              <button onClick={handleCancel}
                 style={{ padding: "11px 16px", backgroundColor: "#F3F4F6", color: "#6B7280", border: "none", borderRadius: 10, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
                 Batal
               </button>
@@ -416,7 +444,7 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
             <span style={{ fontSize: 18 }}>❌</span>
             <p style={{ fontSize: 13, color: "#DC2626", margin: 0, fontWeight: 500 }}>{message}</p>
           </div>
-          <button onClick={reset} style={{ fontSize: 12, color: "#0344D8", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>
+          <button onClick={handleCancel} style={{ fontSize: 12, color: "#0344D8", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>
             Coba lagi →
           </button>
         </div>
