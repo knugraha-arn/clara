@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { Document } from "@/types";
 import { CATEGORY_LABELS } from "@/lib/utils";
 
@@ -33,6 +33,15 @@ interface DocumentSidePanelProps {
 }
 
 export default function DocumentSidePanel({ document: doc, uploaderName, onClose }: DocumentSidePanelProps) {
+  const [parties, setParties] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    if (!doc) { setParties([]); return; }
+    fetch(`/api/documents/${doc.id}/parties`)
+      .then(r => r.json())
+      .then(d => setParties(d.parties || []));
+  }, [doc?.id]);
+
   const handlePreview = useCallback(async () => {
     if (!doc) return;
     const res = await fetch(`/api/documents/${doc.id}/preview`);
@@ -156,6 +165,21 @@ export default function DocumentSidePanel({ document: doc, uploaderName, onClose
                 ))}
               </div>
             </div>
+
+            {/* Pihak yang terlibat */}
+            {parties.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <p style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 8px" }}>Pihak yang Terlibat</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  {parties.map((party) => (
+                    <div key={party.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", backgroundColor: "#EEF2FF", borderRadius: 8 }}>
+                      <span style={{ fontSize: 14, flexShrink: 0 }}>🏢</span>
+                      <span style={{ fontSize: 12, color: "#0344D8", fontWeight: 500 }}>{party.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Classification override info */}
             {doc.classification_overridden && (
