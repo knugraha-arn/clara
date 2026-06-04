@@ -9,25 +9,44 @@ export async function POST(request: NextRequest) {
   const { documentId } = await request.json();
   if (!documentId) return NextResponse.json({ duplicates: [] });
 
+  // Tunggu sebentar untuk pastikan embedding sudah tersimpan
+  await new Promise(r => setTimeout(r, 1000));
+
   // Ambil embedding dari dokumen yang baru diupload
   const { data: newEmbeddings } = await supabase
     .from("document_embeddings")
     .select("embedding, chunk_text")
     .eq("document_id", documentId)
-    .limit(3);
+    .limit(1);
 
   if (!newEmbeddings || newEmbeddings.length === 0) {
+    console.log("[DupCheck] No embeddings found for:", documentId);
     return NextResponse.json({ duplicates: [] });
   }
 
-  // Gunakan embedding pertama untuk cek similarity
-  const firstEmbedding = newEmbeddings[0].embedding;
+  // Parse embedding — bisa berupa string atau array
+  let embedding = newEmbeddings[0].embedding;
+  if (typeof embedding === "string") {
+    try { embedding = JSON.parse(embedding); } catch { return NextResponse.json({ duplicates: [] }); }
+  }
 
-  const { data: similarDocs } = await supabase.rpc("search_documents_semantic_all", {
-    query_embedding: JSON.stringify(firstEmbedding),
+  if (!Array.isArray(embedding) || embedding.length === 0) {
+    console.log("[DupCheck] Invalid embedding format");
+    return NextResponse.json({ duplicates: [] });
+  }
+
+  console.log(`[DupCheck] Checking ${documentId} with embedding length ${embedding.length}`);
+
+  const { data: similarDocs, error: rpcError } = await supabase.rpc("search_documents_semantic_all", {
+    query_embedding: JSON.stringify(embedding),
     match_threshold: 0.85,
-    match_count: 5,
+    match_count: 6,
   });
+
+  if (rpcError) {
+    console.error("[DupCheck] RPC error:", rpcError);
+    return NextResponse.json({ duplicates: [] });
+  }
 
   if (!similarDocs || similarDocs.length === 0) {
     return NextResponse.json({ duplicates: [] });
@@ -62,5 +81,6 @@ export async function POST(request: NextRequest) {
     };
   });
 
+  console.log(`[DupCheck] Found ${duplicates.length} duplicates`);
   return NextResponse.json({ duplicates });
 }
