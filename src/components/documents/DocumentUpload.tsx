@@ -48,6 +48,8 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
   const [aiSuggestion, setAiSuggestion] = useState<AiSuggestion | null>(null);
   const [storagePath, setStoragePath] = useState("");
   const [selectedClassification, setSelectedClassification] = useState<DocumentClassification>("internal");
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [customCategory, setCustomCategory] = useState<string>("");
   const [overrideReason, setOverrideReason] = useState("");
   const [duplicates, setDuplicates] = useState<DuplicateDoc[]>([]);
 
@@ -154,6 +156,7 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
         documentId, // simpan ID untuk keperluan cancel
       });
       setSelectedClassification(data.document.classification_ai_suggestion || data.document.classification);
+      setSelectedCategory(data.document.category || "lainnya");
       setStage("confirm");
 
     } catch (err) {
@@ -170,13 +173,17 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
       setStage("saving");
       setMessage("Menyimpan klasifikasi...");
 
-      if (isOverride) {
+      const finalCategory = customCategory.trim() || selectedCategory;
+      const isCategoryOverride = finalCategory !== aiSuggestion.category;
+
+      if (isOverride || isCategoryOverride) {
         await fetch("/api/documents/update-classification", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             storagePath,
             classification: selectedClassification,
+            category: finalCategory,
             overrideReason,
           }),
         });
@@ -216,6 +223,8 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
     setAiSuggestion(null);
     setStoragePath("");
     setOverrideReason("");
+    setSelectedCategory("");
+    setCustomCategory("");
     setDuplicates([]);
   };
 
@@ -362,6 +371,69 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
                 </div>
               </div>
             )}
+
+            {/* Category selector */}
+            <div>
+              <p style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Kategori Dokumen
+                {selectedCategory !== aiSuggestion.category && !customCategory && (
+                  <span style={{ marginLeft: 8, fontSize: 10, color: "#D97706", fontWeight: 600 }}>⚠️ Diubah dari AI</span>
+                )}
+              </p>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+                {[
+                  { value: "surat_masuk", label: "Surat Masuk" },
+                  { value: "surat_keluar", label: "Surat Keluar" },
+                  { value: "kontrak", label: "Kontrak" },
+                  { value: "memo", label: "Memo" },
+                  { value: "laporan", label: "Laporan" },
+                  { value: "kebijakan", label: "Kebijakan" },
+                  { value: "undangan", label: "Undangan" },
+                  { value: "pengumuman", label: "Pengumuman" },
+                  { value: "lainnya", label: "Lainnya" },
+                ].map(cat => {
+                  const isAiSuggested = cat.value === aiSuggestion.category;
+                  const isSelected = cat.value === selectedCategory && !customCategory;
+                  return (
+                    <button key={cat.value}
+                      onClick={() => { setSelectedCategory(cat.value); setCustomCategory(""); }}
+                      style={{
+                        padding: "5px 12px", borderRadius: 7, fontSize: 12, fontWeight: 500,
+                        border: `1px solid ${isSelected ? "#0344D8" : "#E5E7EB"}`,
+                        backgroundColor: isSelected ? "#EEF2FF" : "white",
+                        color: isSelected ? "#0344D8" : "#6B7280",
+                        cursor: "pointer", fontFamily: "inherit",
+                        position: "relative",
+                      }}>
+                      {cat.label}
+                      {isAiSuggested && (
+                        <span style={{ marginLeft: 4, fontSize: 9, color: "#16A34A", fontWeight: 700 }}>✦ AI</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  type="text"
+                  value={customCategory}
+                  onChange={(e) => { setCustomCategory(e.target.value); if (e.target.value) setSelectedCategory(""); }}
+                  placeholder="Atau ketik kategori sendiri... (misal: Invoice, Proposal, MoM)"
+                  style={{ flex: 1, border: "1px solid #E5E7EB", borderRadius: 8, padding: "7px 12px", fontSize: 12, fontFamily: "inherit", outline: "none", backgroundColor: customCategory ? "#F0FDF4" : "white", borderColor: customCategory ? "#16A34A" : "#E5E7EB" }}
+                />
+                {customCategory && (
+                  <button onClick={() => setCustomCategory("")}
+                    style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #E5E7EB", backgroundColor: "white", cursor: "pointer", fontSize: 12, color: "#9CA3AF", fontFamily: "inherit" }}>
+                    ✕
+                  </button>
+                )}
+              </div>
+              {customCategory && (
+                <p style={{ fontSize: 11, color: "#16A34A", margin: "4px 0 0", fontWeight: 500 }}>
+                  ✓ Kategori custom: "{customCategory}"
+                </p>
+              )}
+            </div>
 
             {/* Classification selector */}
             <div>
