@@ -9,78 +9,106 @@ export async function POST(request: NextRequest) {
   const { documentId } = await request.json();
   if (!documentId) return NextResponse.json({ duplicates: [] });
 
-  // Tunggu sebentar untuk pastikan embedding sudah tersimpan
+  // Ambil info dokumen yang baru diupload
+  const { data: currentDoc } = await supabase
+    .from("documents")
+    .select("id, title, file_name, file_size, is_scanned")
+    .eq("id", documentId)
+    .single();
+
+  if (!currentDoc) return NextResponse.json({ duplicates: [] });
+
+  // Tunggu sebentar untuk pastikan embedding tersimpan (untuk non-scan)
   await new Promise(r => setTimeout(r, 1000));
 
-  // Ambil embedding dari dokumen yang baru diupload
+  // Ambil embedding
   const { data: newEmbeddings } = await supabase
     .from("document_embeddings")
-    .select("embedding, chunk_text")
+    .select("embedding")
     .eq("document_id", documentId)
     .limit(1);
 
-  if (!newEmbeddings || newEmbeddings.length === 0) {
-    console.log("[DupCheck] No embeddings found for:", documentId);
-    return NextResponse.json({ duplicates: [] });
+  const hasEmbedding = newEmbeddings && newEmbeddings.length > 0;
+
+  // --- METODE 1: Embedding similarity (dokumen digital) ---
+  if (hasEmbedding) {
+    let embedding = newEmbeddings[0].embedding;
+    if (typeof embedding === "string") {
+      try { embedding = JSON.parse(embedding); } catch { embedding = null; }
+    }
+
+    if (Array.isArray(embedding) && embedding.length > 0) {
+      const { data: similarDocs } = await supabase.rpc("search_documents_semantic_all", {
+        query_embedding: JSON.stringify(embedding),
+        match_threshold: 0.85,
+        match_count: 6,
+      });
+
+      if (similarDocs && similarDocs.length > 0) {
+        const otherDocIds = [...new Set(
+          similarDocs
+            .filter((r: { document_id: string }) => r.document_id !== documentId)
+            .map((r: { document_id: string }) => r.document_id)
+        )];
+
+        if (otherDocIds.length > 0) {
+          const { data: similarDocDetails } = await supabase
+            .from("documents")
+            .select("id, title, category, classification, created_at")
+            .in("id", otherDocIds)
+            .eq("status", "ready");
+
+          if (similarDocDetails && similarDocDetails.length > 0) {
+            const duplicates = similarDocDetails.map((doc: {
+              id: string; title: string; category: string; classification: string; created_at: string;
+            }) => {
+              const bestMatch = similarDocs.find((r: { document_id: string; similarity: number }) => r.document_id === doc.id);
+              return {
+                id: doc.id,
+                title: doc.title,
+                category: doc.category,
+                classification: doc.classification,
+                created_at: doc.created_at,
+                similarity: Math.round((bestMatch?.similarity || 0) * 100),
+                match_type: "content",
+              };
+            });
+            return NextResponse.json({ duplicates });
+          }
+        }
+      }
+    }
   }
 
-  // Parse embedding — bisa berupa string atau array
-  let embedding = newEmbeddings[0].embedding;
-  if (typeof embedding === "string") {
-    try { embedding = JSON.parse(embedding); } catch { return NextResponse.json({ duplicates: [] }); }
-  }
-
-  if (!Array.isArray(embedding) || embedding.length === 0) {
-    console.log("[DupCheck] Invalid embedding format");
-    return NextResponse.json({ duplicates: [] });
-  }
-
-  console.log(`[DupCheck] Checking ${documentId} with embedding length ${embedding.length}`);
-
-  const { data: similarDocs, error: rpcError } = await supabase.rpc("search_documents_semantic_all", {
-    query_embedding: JSON.stringify(embedding),
-    match_threshold: 0.85,
-    match_count: 6,
-  });
-
-  if (rpcError) {
-    console.error("[DupCheck] RPC error:", rpcError);
-    return NextResponse.json({ duplicates: [] });
-  }
-
-  if (!similarDocs || similarDocs.length === 0) {
-    return NextResponse.json({ duplicates: [] });
-  }
-
-  // Filter out dokumen itu sendiri
-  const otherDocIds = [...new Set(
-    similarDocs
-      .filter((r: { document_id: string }) => r.document_id !== documentId)
-      .map((r: { document_id: string }) => r.document_id)
-  )];
-
-  if (otherDocIds.length === 0) return NextResponse.json({ duplicates: [] });
-
-  const { data: similarDocDetails } = await supabase
+  // --- METODE 2: Filename similarity (fallback untuk scan atau tidak ada embedding) ---
+  // Cari dokumen dengan nama file yang sama atau mirip
+  const { data: filenameDocs } = await supabase
     .from("documents")
-    .select("id, title, category, classification, created_at")
-    .in("id", otherDocIds)
-    .eq("status", "ready");
+    .select("id, title, category, classification, created_at, file_name, file_size")
+    .eq("status", "ready")
+    .neq("id", documentId)
+    .or(`file_name.eq.${currentDoc.file_name},title.eq.${currentDoc.title}`);
 
-  const duplicates = (similarDocDetails || []).map((doc: {
-    id: string; title: string; category: string; classification: string; created_at: string;
-  }) => {
-    const bestMatch = similarDocs.find((r: { document_id: string; similarity: number }) => r.document_id === doc.id);
-    return {
-      id: doc.id,
-      title: doc.title,
-      category: doc.category,
-      classification: doc.classification,
-      created_at: doc.created_at,
-      similarity: Math.round((bestMatch?.similarity || 0) * 100),
-    };
-  });
+  if (filenameDocs && filenameDocs.length > 0) {
+    const duplicates = filenameDocs.map((doc: {
+      id: string; title: string; category: string; classification: string; created_at: string; file_name: string; file_size: number;
+    }) => {
+      // Hitung similarity berdasarkan nama file dan ukuran
+      const sameFileName = doc.file_name === currentDoc.file_name;
+      const sameSize = Math.abs(doc.file_size - currentDoc.file_size) < 1024; // toleransi 1KB
+      const similarity = sameFileName && sameSize ? 99 : sameFileName ? 90 : 80;
+      return {
+        id: doc.id,
+        title: doc.title,
+        category: doc.category,
+        classification: doc.classification,
+        created_at: doc.created_at,
+        similarity,
+        match_type: "filename",
+      };
+    });
+    return NextResponse.json({ duplicates });
+  }
 
-  console.log(`[DupCheck] Found ${duplicates.length} duplicates`);
-  return NextResponse.json({ duplicates });
+  return NextResponse.json({ duplicates: [] });
 }
