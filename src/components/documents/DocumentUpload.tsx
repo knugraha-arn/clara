@@ -12,6 +12,15 @@ const CLASSIFICATION_CONFIG: Record<DocumentClassification, { label: string; col
   restricted:   { label: "Restricted",   color: "#DC2626", bg: "#FEF2F2", border: "#FECACA", desc: "Sangat terbatas, board level" },
 };
 
+interface DuplicateDoc {
+  id: string;
+  title: string;
+  category: string;
+  classification: string;
+  created_at: string;
+  similarity: number;
+}
+
 interface AiSuggestion {
   classification: DocumentClassification;
   classification_confidence: number;
@@ -39,6 +48,7 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
   const [storagePath, setStoragePath] = useState("");
   const [selectedClassification, setSelectedClassification] = useState<DocumentClassification>("internal");
   const [overrideReason, setOverrideReason] = useState("");
+  const [duplicates, setDuplicates] = useState<DuplicateDoc[]>([]);
 
   const supabase = createClient();
 
@@ -111,6 +121,18 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
         is_scanned: data.document.is_scanned || false,
       });
       setSelectedClassification(data.document.classification_ai_suggestion || data.document.classification);
+
+      // Cek duplikat
+      try {
+        const dupRes = await fetch("/api/documents/check-duplicate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ documentId: data.document.id }),
+        });
+        const dupData = await dupRes.json();
+        setDuplicates(dupData.duplicates || []);
+      } catch { setDuplicates([]); }
+
       setProgress(100);
       setStage("confirm");
 
@@ -169,6 +191,7 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
     setAiSuggestion(null);
     setStoragePath("");
     setOverrideReason("");
+    setDuplicates([]);
   };
 
   const isOverride = aiSuggestion && selectedClassification !== aiSuggestion.classification;
@@ -258,6 +281,37 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
                     </div>
                   </div>
                 </div>
+              </div>
+            )}
+
+          {/* Duplikat warning */}
+            {duplicates.length > 0 && (
+              <div style={{ marginBottom: 14, backgroundColor: "#FFF7ED", border: "2px solid #FED7AA", borderRadius: 10, padding: "14px 16px" }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
+                  <span style={{ fontSize: 20, flexShrink: 0 }}>⚠️</span>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#C2410C", margin: "0 0 4px" }}>
+                      Kemungkinan Duplikat Terdeteksi
+                    </p>
+                    <p style={{ fontSize: 12, color: "#7C2D12", margin: 0 }}>
+                      Dokumen ini mirip dengan {duplicates.length} dokumen yang sudah ada di arsip.
+                    </p>
+                  </div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {duplicates.map(dup => (
+                    <div key={dup.id} style={{ backgroundColor: "white", border: "1px solid #FED7AA", borderRadius: 8, padding: "8px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ fontSize: 12, fontWeight: 600, color: "#1A1F2E", margin: "0 0 2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{dup.title}</p>
+                        <p style={{ fontSize: 11, color: "#9CA3AF", margin: 0 }}>{dup.classification} · {new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" }).format(new Date(dup.created_at))}</p>
+                      </div>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: dup.similarity >= 95 ? "#DC2626" : "#D97706", flexShrink: 0, marginLeft: 12 }}>{dup.similarity}%</span>
+                    </div>
+                  ))}
+                </div>
+                <p style={{ fontSize: 11, color: "#7C2D12", margin: "10px 0 0", fontStyle: "italic" }}>
+                  Anda tetap bisa menyimpan dokumen ini jika memang berbeda dari yang sudah ada.
+                </p>
               </div>
             )}
 

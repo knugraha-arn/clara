@@ -7,25 +7,80 @@ export const maxDuration = 60;
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+const DAILY_LIMITS: Record<string, number> = {
+  auditor: 20,
+  contributor: 30,
+  admin: 50,
+  super_admin: 999999,
+};
+
+export async function GET() {
+  // Ambil usage hari ini
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const role = profile?.role || "auditor";
+  const limit = DAILY_LIMITS[role] || 20;
+
+  const today = new Date().toISOString().split("T")[0];
+  const { data: usage } = await supabase
+    .from("ai_usage")
+    .select("count")
+    .eq("user_id", user.id)
+    .eq("usage_date", today)
+    .single();
+
+  const used = usage?.count || 0;
+
+  return NextResponse.json({ used, limit, remaining: Math.max(0, limit - used) });
+}
+
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const { data: profile } = await supabase.from("profiles").select("role, full_name").eq("id", user.id).single();
+  const userRole = profile?.role || "auditor";
+  const limit = DAILY_LIMITS[userRole] || 20;
+
+  // Cek usage hari ini
+  const today = new Date().toISOString().split("T")[0];
+  const { data: usage } = await supabase
+    .from("ai_usage")
+    .select("count")
+    .eq("user_id", user.id)
+    .eq("usage_date", today)
+    .single();
+
+  const used = usage?.count || 0;
+  if (used >= limit) {
+    return NextResponse.json({
+      error: `Batas harian tercapai (${limit} pertanyaan). Reset besok.`,
+      limitReached: true,
+    }, { status: 429 });
+  }
+
   const { question, history = [] } = await request.json();
   if (!question?.trim()) return NextResponse.json({ error: "Pertanyaan diperlukan" }, { status: 400 });
 
-  const { data: profile } = await supabase.from("profiles").select("role, full_name").eq("id", user.id).single();
-  const userRole = profile?.role || "auditor";
+  // Increment usage
+  if (usage) {
+    await supabase.from("ai_usage").update({ count: used + 1, updated_at: new Date().toISOString() })
+      .eq("user_id", user.id).eq("usage_date", today);
+  } else {
+    await supabase.from("ai_usage").insert({ user_id: user.id, usage_date: today, count: 1 });
+  }
 
-  // Tentukan klasifikasi yang boleh diakses berdasarkan role
   const allowedClassifications = userRole === "super_admin" || userRole === "admin"
     ? ["public", "internal", "confidential", "restricted"]
     : userRole === "contributor"
     ? ["public", "internal", "confidential"]
-    : ["public", "internal"]; // auditor
+    : ["public", "internal"];
 
-  // 1. Semantic search untuk ambil konteks dokumen relevan
+  // Semantic search untuk konteks
   let documentContext = "";
   try {
     const queryEmbedding = await embedSearchQuery(question);
@@ -36,7 +91,6 @@ export async function POST(request: NextRequest) {
     });
 
     if (semanticResults?.length > 0) {
-      // Filter by allowed classifications
       const docIds = [...new Set(semanticResults.map((r: { document_id: string }) => r.document_id))];
       const { data: docs } = await supabase
         .from("documents")
@@ -45,27 +99,31 @@ export async function POST(request: NextRequest) {
         .in("classification", allowedClassifications);
 
       if (docs && docs.length > 0) {
-        const docMap = Object.fromEntries(docs.map((d: { id: string; title: string; summary: string | null; category: string; classification: string; retention_date: string | null; created_at: string; tags: string[] }) => [d.id, d]));
+        const docMap = Object.fromEntries(docs.map((d: {
+          id: string; title: string; summary: string | null; category: string;
+          classification: string; retention_date: string | null; created_at: string; tags: string[];
+        }) => [d.id, d]));
+
         const relevantChunks = semanticResults
           .filter((r: { document_id: string }) => docMap[r.document_id])
           .slice(0, 5);
 
-        documentContext = relevantChunks.map((r: { document_id: string; chunk_text: string; similarity: number }) => {
+        documentContext = relevantChunks.map((r: { document_id: string; chunk_text: string }) => {
           const doc = docMap[r.document_id];
           if (!doc) return "";
           return `--- DOKUMEN: "${doc.title}" ---
 Kategori: ${doc.category} | Klasifikasi: ${doc.classification}
 Retensi: ${doc.retention_date || "tidak diset"}
 Ringkasan: ${doc.summary || "-"}
-Konten relevan: ${r.chunk_text}`;
+Konten: ${r.chunk_text}`;
         }).filter(Boolean).join("\n\n");
       }
     }
   } catch (e) {
-    console.error("[AI Assistant] Search error:", e);
+    console.error("[AI] Search error:", e);
   }
 
-  // 2. Ambil metadata statistik dokumen untuk pertanyaan agregat
+  // Metadata statistik
   const { data: allDocs } = await supabase
     .from("documents")
     .select("title, category, classification, retention_date, created_at, is_scanned")
@@ -73,41 +131,42 @@ Konten relevan: ${r.chunk_text}`;
     .eq("status", "ready");
 
   const metaContext = `
-RINGKASAN ARSIP CLARA:
-- Total dokumen yang bisa Anda akses: ${allDocs?.length || 0}
-- Dokumen per kategori: ${JSON.stringify(
-    (allDocs || []).reduce((acc: Record<string, number>, d: { category: string }) => {
-      acc[d.category] = (acc[d.category] || 0) + 1; return acc;
-    }, {})
-  )}
-- Dokumen scan (analisis terbatas): ${(allDocs || []).filter((d: { is_scanned: boolean }) => d.is_scanned).length}
-- Dokumen akan expired bulan ini: ${(allDocs || []).filter((d: { retention_date: string | null }) => {
+RINGKASAN ARSIP CLARA (data real-time):
+- Total dokumen: ${allDocs?.length || 0}
+- Per kategori: ${JSON.stringify((allDocs || []).reduce((acc: Record<string, number>, d: { category: string }) => { acc[d.category] = (acc[d.category] || 0) + 1; return acc; }, {}))}
+- Dokumen scan: ${(allDocs || []).filter((d: { is_scanned: boolean }) => d.is_scanned).length}
+- Expired bulan ini: ${(allDocs || []).filter((d: { retention_date: string | null }) => {
     if (!d.retention_date) return false;
-    const exp = new Date(d.retention_date);
-    const now = new Date();
-    const diff = (exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+    const diff = (new Date(d.retention_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
     return diff >= 0 && diff <= 30;
   }).length}`;
 
-  // 3. Build system prompt
-  const systemPrompt = `Kamu adalah CLARA AI Assistant — asisten untuk sistem manajemen dokumen arsip organisasi Arranetwork.
+  const systemPrompt = `Kamu adalah CLARA AI Assistant — asisten manajemen dokumen arsip untuk organisasi Arranetwork.
 
-PERANMU:
-- Menjawab pertanyaan tentang dokumen yang tersimpan di arsip CLARA
-- Membantu user menemukan, memahami, dan menganalisis dokumen
-- Hanya berbicara tentang dokumen dalam sistem CLARA — tidak menjawab pertanyaan umum di luar konteks ini
+IDENTITAS:
+- Nama: CLARA AI Assistant
+- Basis data: Arsip dokumen CLARA milik Arranetwork
+- Bahasa: Indonesia (profesional dan ringkas)
 
-BATASAN:
-- Hanya akses dokumen dengan klasifikasi: ${allowedClassifications.join(", ")}
-- Jangan membuat informasi yang tidak ada dalam konteks dokumen
-- Jika tidak ada dokumen relevan, katakan dengan jelas
-- Jawab dalam Bahasa Indonesia yang profesional dan ringkas
+YANG BISA KAMU LAKUKAN ✅:
+- Menjawab pertanyaan tentang dokumen di arsip CLARA
+- Memberikan informasi metadata dokumen (kategori, klasifikasi, tanggal, uploader)
+- Informasi retensi & status dokumen
+- Statistik arsip
+- Rekomendasi tindakan (dokumen expired, perlu review, dll)
+- Pencarian konseptual isi dokumen
+
+YANG TIDAK BISA KAMU LAKUKAN ❌:
+- Menjawab pertanyaan di luar konteks arsip CLARA
+- Generate kode atau artefak
+- Mengakses internet atau data eksternal
+- Menampilkan isi verbatim dokumen Confidential/Restricted
+- Mengakses dokumen di luar hak akses role: ${allowedClassifications.join(", ")}
 
 ${metaContext}
 
-${documentContext ? `DOKUMEN RELEVAN DITEMUKAN:\n${documentContext}` : "Tidak ada dokumen yang secara spesifik relevan dengan pertanyaan ini, tapi kamu bisa menjawab berdasarkan metadata arsip di atas."}`;
+${documentContext ? `DOKUMEN RELEVAN:\n${documentContext}` : "Tidak ada dokumen yang spesifik relevan, jawab berdasarkan metadata arsip di atas."}`;
 
-  // 4. Build messages dengan history
   const messages = [
     { role: "system" as const, content: systemPrompt },
     ...history.slice(-6).map((h: { role: string; content: string }) => ({
@@ -117,7 +176,6 @@ ${documentContext ? `DOKUMEN RELEVAN DITEMUKAN:\n${documentContext}` : "Tidak ad
     { role: "user" as const, content: question },
   ];
 
-  // 5. Call OpenAI
   const response = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     messages,
@@ -127,12 +185,15 @@ ${documentContext ? `DOKUMEN RELEVAN DITEMUKAN:\n${documentContext}` : "Tidak ad
 
   const answer = response.choices[0].message.content || "Maaf, tidak dapat memproses pertanyaan ini.";
 
-  // 6. Log ke audit trail
   await supabase.from("search_history").insert({
     user_id: user.id,
     query: `[AI] ${question}`,
     result_count: 1,
   });
 
-  return NextResponse.json({ answer, hasContext: !!documentContext });
+  return NextResponse.json({
+    answer,
+    hasContext: !!documentContext,
+    usage: { used: used + 1, limit, remaining: Math.max(0, limit - used - 1) },
+  });
 }

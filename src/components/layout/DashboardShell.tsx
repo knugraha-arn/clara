@@ -25,7 +25,7 @@ const ROLE_LABELS: Record<string, { label: string; color: string; bg: string }> 
 
 const NAV = [
   { href: "/dashboard", icon: "📄", label: "Dokumen" },
-  { href: "/dashboard/search", icon: "🔍", label: "Pencarian AI" },
+  { href: "/dashboard/search", icon: "💬", label: "AI Assistance" },
   { href: "/dashboard/register", icon: "📒", label: "Doc Register", roles: ["super_admin", "admin", "auditor"] },
   { href: "/dashboard/audit", icon: "📋", label: "Audit Trail", roles: ["super_admin", "admin", "auditor"] },
   { href: "/dashboard/stats", icon: "📊", label: "Statistik", roles: ["super_admin", "admin"] },
