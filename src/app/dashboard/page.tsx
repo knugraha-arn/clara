@@ -215,7 +215,12 @@ export default function DashboardPage() {
                   >
                     {/* Title + summary + tags */}
                     <div style={{ minWidth: 0 }}>
-                      <p style={{ fontSize: 13, fontWeight: 600, color: "#1A1F2E", margin: "0 0 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.title}</p>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: "#1A1F2E", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.title}</p>
+                      {doc.is_scanned && (
+                        <span title="Dokumen scan — analisis terbatas" style={{ fontSize: 10, fontWeight: 600, backgroundColor: "#FFFBEB", color: "#D97706", padding: "1px 5px", borderRadius: 4, flexShrink: 0, cursor: "help" }}>📷</span>
+                      )}
+                    </div>
                       {doc.summary && <p style={{ fontSize: 11, color: "#6B7280", margin: "0 0 4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.summary}</p>}
                       {doc.tags?.length > 0 && (
                         <div style={{ display: "flex", gap: 3 }}>

@@ -63,6 +63,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. AI Analysis (kategori + klasifikasi sekaligus)
+    // Deteksi scan dokumen
+    const isScanned = extractedText.trim().length < 20;
+    console.log(`[Process] is_scanned: ${isScanned}, text length: ${extractedText.length}`);
+
     const textPage1 = extractedText.slice(0, 4000);
     const aiResult = await analyzeDocumentPage1(textPage1 || `Nama file: ${fileName}`, fileName);
 
@@ -78,6 +82,7 @@ export async function POST(request: NextRequest) {
       extracted_text_page1: textPage1,
       page_count: pageCount,
       tags: aiResult.tags,
+      is_scanned: isScanned,
       classification: finalClassification,
       classification_ai_suggestion: aiResult.classification,
       classification_confidence: aiResult.classification_confidence,
@@ -147,6 +152,7 @@ export async function POST(request: NextRequest) {
         classification_confidence: aiResult.classification_confidence,
         classification_overridden: isOverridden,
         classification_reason: aiResult.classification_reason,
+        is_scanned: isScanned,
       },
     });
 

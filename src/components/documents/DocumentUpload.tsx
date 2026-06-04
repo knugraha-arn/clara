@@ -19,6 +19,7 @@ interface AiSuggestion {
   category: string;
   summary: string;
   tags: string[];
+  is_scanned: boolean;
 }
 
 interface DocumentUploadProps {
@@ -107,6 +108,7 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
         category: data.document.category,
         summary: data.document.summary,
         tags: data.document.tags,
+        is_scanned: data.document.is_scanned || false,
       });
       setSelectedClassification(data.document.classification_ai_suggestion || data.document.classification);
       setProgress(100);
@@ -236,7 +238,24 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
           </div>
 
           <div style={{ padding: "16px" }}>
-            {/* AI Classification suggestion */}
+            {/* Scan warning */}
+            {aiSuggestion.is_scanned && (
+              <div style={{ marginBottom: 14, backgroundColor: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, padding: "12px 14px" }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                  <span style={{ fontSize: 20, flexShrink: 0 }}>📷</span>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: "#D97706", margin: "0 0 4px" }}>
+                      Dokumen Scan Terdeteksi
+                    </p>
+                    <p style={{ fontSize: 12, color: "#92400E", margin: 0, lineHeight: 1.5 }}>
+                      Dokumen ini adalah hasil scan foto, bukan PDF digital. Summary, kategori, dan klasifikasi dibuat berdasarkan nama file saja — kualitas analisis terbatas. Pertimbangkan upload versi PDF digital untuk hasil lebih akurat.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          {/* AI Classification suggestion */}
             <div style={{ marginBottom: 14 }}>
               <p style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 Klasifikasi AI ({Math.round(aiSuggestion.classification_confidence * 100)}% yakin)

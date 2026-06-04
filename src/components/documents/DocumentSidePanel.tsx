@@ -101,6 +101,11 @@ export default function DocumentSidePanel({ document: doc, uploaderName, onClose
                   {CATEGORY_LABELS[doc.category] || doc.category}
                 </span>
               )}
+              {doc?.is_scanned && (
+                <span style={{ fontSize: 11, fontWeight: 600, backgroundColor: "#FFFBEB", color: "#D97706", padding: "2px 8px", borderRadius: 5, display: "flex", alignItems: "center", gap: 3 }}>
+                  📷 Scan
+                </span>
+              )}
             </div>
           </div>
           <button onClick={onClose}
@@ -112,6 +117,16 @@ export default function DocumentSidePanel({ document: doc, uploaderName, onClose
         {/* Content */}
         {doc && (
           <div style={{ flex: 1, overflowY: "auto", padding: "20px" }}>
+            {/* Scan notice */}
+            {doc.is_scanned && (
+              <div style={{ marginBottom: 16, backgroundColor: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, padding: "10px 14px", display: "flex", gap: 8, alignItems: "flex-start" }}>
+                <span style={{ fontSize: 16, flexShrink: 0 }}>📷</span>
+                <p style={{ fontSize: 12, color: "#92400E", margin: 0, lineHeight: 1.5 }}>
+                  Dokumen scan — analisis AI terbatas. Upload PDF digital untuk kualitas lebih baik.
+                </p>
+              </div>
+            )}
+
             {/* Summary */}
             {doc.summary && (
               <div style={{ marginBottom: 20 }}>

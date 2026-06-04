@@ -31,6 +31,7 @@ export interface Document {
   classification_override_reason: string | null;
   retention_date: string | null;
   retention_policy: RetentionPolicy;
+  is_scanned: boolean;
   created_at: string;
   updated_at: string;
 }
