@@ -29,6 +29,7 @@ const NAV = [
   { href: "/dashboard/register", icon: "📒", label: "Doc Register", roles: ["super_admin", "admin", "auditor"] },
   { href: "/dashboard/audit", icon: "📋", label: "Audit Trail", roles: ["super_admin", "admin", "auditor"] },
   { href: "/dashboard/stats", icon: "📊", label: "Statistik", roles: ["super_admin", "admin"] },
+  { href: "/dashboard/users", icon: "👥", label: "Users", roles: ["super_admin"] },
 ];
 
 export default function DashboardShell({ children, profile }: { children: React.ReactNode; profile: UserProfile }) {

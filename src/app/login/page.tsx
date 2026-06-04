@@ -14,6 +14,7 @@ function LoginContent() {
   const errorMessages: Record<string, string> = {
     domain_not_allowed: "Akses hanya untuk email @arranetwork.com",
     auth_callback_failed: "Login gagal, coba lagi",
+    account_suspended: "Akun Anda telah disuspend. Hubungi administrator.",
   };
 
   const handleGoogleLogin = async () => {
