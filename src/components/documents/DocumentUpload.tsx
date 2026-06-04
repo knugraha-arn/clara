@@ -165,6 +165,7 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
 
       setStage("done");
       setMessage("Dokumen berhasil diproses!");
+      setPendingDocId(null); // Dokumen confirmed, jangan dihapus jika reset
       setTimeout(() => {
         setSelectedFile(null);
         setTitle("");
@@ -173,6 +174,7 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
         setAiSuggestion(null);
         setStoragePath("");
         setOverrideReason("");
+        setDuplicates([]);
         onSuccess?.();
       }, 1500);
 
@@ -182,7 +184,17 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
     }
   };
 
-  const reset = () => {
+  const [pendingDocId, setPendingDocId] = useState<string | null>(null);
+
+  const reset = async () => {
+    // Hapus dokumen dari DB & storage jika user batalkan setelah upload
+    if (pendingDocId) {
+      try {
+        await fetch(`/api/documents?id=${pendingDocId}`, { method: "DELETE" });
+      } catch (e) {
+        console.error("Failed to delete cancelled doc:", e);
+      }
+    }
     setSelectedFile(null);
     setTitle("");
     setStage("idle");
@@ -192,6 +204,7 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
     setStoragePath("");
     setOverrideReason("");
     setDuplicates([]);
+    setPendingDocId(null);
   };
 
   const isOverride = aiSuggestion && selectedClassification !== aiSuggestion.classification;
