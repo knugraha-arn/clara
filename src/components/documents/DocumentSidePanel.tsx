@@ -119,10 +119,13 @@ export default function DocumentSidePanel({ document: doc, uploaderName, onClose
           <div style={{ flex: 1, overflowY: "auto", padding: "20px" }}>
             {/* Scan notice */}
             {doc.is_scanned && (
-              <div style={{ marginBottom: 16, backgroundColor: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, padding: "10px 14px", display: "flex", gap: 8, alignItems: "flex-start" }}>
-                <span style={{ fontSize: 16, flexShrink: 0 }}>📷</span>
-                <p style={{ fontSize: 12, color: "#92400E", margin: 0, lineHeight: 1.5 }}>
-                  Dokumen scan — analisis AI terbatas. Upload PDF digital untuk kualitas lebih baik.
+              <div style={{ marginBottom: 16, backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 10, padding: "12px 14px" }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 6 }}>
+                  <span style={{ fontSize: 16, flexShrink: 0 }}>📷</span>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: "#DC2626", margin: 0 }}>Dokumen Scan</p>
+                </div>
+                <p style={{ fontSize: 11, color: "#7F1D1D", margin: 0, lineHeight: 1.5 }}>
+                  AI tidak dapat membaca isi dokumen ini. Klasifikasi ditetapkan secara manual oleh uploader — pastikan sudah sesuai dengan isi dokumen yang sebenarnya.
                 </p>
               </div>
             )}

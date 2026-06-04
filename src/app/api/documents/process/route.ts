@@ -70,9 +70,11 @@ export async function POST(request: NextRequest) {
     const textPage1 = extractedText.slice(0, 4000);
     const aiResult = await analyzeDocumentPage1(textPage1 || `Nama file: ${fileName}`, fileName);
 
-    // 5. Tentukan klasifikasi final (override atau AI suggestion)
-    const finalClassification = classificationOverride || aiResult.classification;
-    const isOverridden = !!classificationOverride && classificationOverride !== aiResult.classification;
+    // 5. Tentukan klasifikasi final
+    // Dokumen scan: default confidential karena AI tidak bisa baca isi
+    const aiClassification = isScanned ? "confidential" : aiResult.classification;
+    const finalClassification = classificationOverride || aiClassification;
+    const isOverridden = !!classificationOverride && classificationOverride !== aiClassification;
 
     // 6. Update document
     await supabase.from("documents").update({
@@ -84,8 +86,8 @@ export async function POST(request: NextRequest) {
       tags: aiResult.tags,
       is_scanned: isScanned,
       classification: finalClassification,
-      classification_ai_suggestion: aiResult.classification,
-      classification_confidence: aiResult.classification_confidence,
+      classification_ai_suggestion: aiClassification,
+      classification_confidence: isScanned ? 0 : aiResult.classification_confidence,
       classification_overridden: isOverridden,
       classification_override_reason: isOverridden ? (overrideReason || null) : null,
       status: "processing",
@@ -148,8 +150,8 @@ export async function POST(request: NextRequest) {
         summary: aiResult.summary,
         tags: aiResult.tags,
         classification: finalClassification,
-        classification_ai_suggestion: aiResult.classification,
-        classification_confidence: aiResult.classification_confidence,
+        classification_ai_suggestion: aiClassification,
+        classification_confidence: isScanned ? 0 : aiResult.classification_confidence,
         classification_overridden: isOverridden,
         classification_reason: aiResult.classification_reason,
         is_scanned: isScanned,

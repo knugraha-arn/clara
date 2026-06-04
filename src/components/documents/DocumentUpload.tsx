@@ -240,16 +240,22 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
           <div style={{ padding: "16px" }}>
             {/* Scan warning */}
             {aiSuggestion.is_scanned && (
-              <div style={{ marginBottom: 14, backgroundColor: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, padding: "12px 14px" }}>
+              <div style={{ marginBottom: 14, backgroundColor: "#FEF2F2", border: "2px solid #FECACA", borderRadius: 10, padding: "14px 16px" }}>
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                  <span style={{ fontSize: 20, flexShrink: 0 }}>📷</span>
+                  <span style={{ fontSize: 22, flexShrink: 0 }}>📷</span>
                   <div>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: "#D97706", margin: "0 0 4px" }}>
-                      Dokumen Scan Terdeteksi
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#DC2626", margin: "0 0 6px" }}>
+                      Dokumen Scan — Klasifikasi Tidak Terdeteksi
                     </p>
-                    <p style={{ fontSize: 12, color: "#92400E", margin: 0, lineHeight: 1.5 }}>
-                      Dokumen ini adalah hasil scan foto, bukan PDF digital. Summary, kategori, dan klasifikasi dibuat berdasarkan nama file saja — kualitas analisis terbatas. Pertimbangkan upload versi PDF digital untuk hasil lebih akurat.
+                    <p style={{ fontSize: 12, color: "#7F1D1D", margin: "0 0 8px", lineHeight: 1.6 }}>
+                      AI tidak dapat membaca isi dokumen ini karena merupakan hasil scan foto. Klasifikasi otomatis <strong>tidak dapat dilakukan</strong> — dokumen ini telah di-set ke <strong>Confidential</strong> sebagai default keamanan.
                     </p>
+                    <div style={{ backgroundColor: "#FEE2E2", borderRadius: 8, padding: "8px 12px", display: "flex", alignItems: "flex-start", gap: 6 }}>
+                      <span style={{ fontSize: 14, flexShrink: 0 }}>⚠️</span>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: "#991B1B", margin: 0, lineHeight: 1.5 }}>
+                        Anda <u>wajib menentukan klasifikasi yang tepat</u> sebelum menyimpan. Pilih klasifikasi di bawah berdasarkan isi dokumen yang Anda ketahui.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
