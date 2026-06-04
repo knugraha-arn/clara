@@ -164,6 +164,56 @@ export async function POST(request: NextRequest) {
     return diff >= 0 && diff <= 30;
   });
 
+  // Query dokumen by party name jika ada keyword yang cocok
+  let partyContext = "";
+  try {
+    const { data: matchingParties } = await supabase
+      .from("parties")
+      .select("id, name")
+      .ilike("name", `%${question.slice(0, 50)}%`)
+      .limit(5);
+
+    if (matchingParties && matchingParties.length > 0) {
+      for (const party of matchingParties) {
+        const { data: partyDocs } = await supabase
+          .from("document_parties")
+          .select("document_id, documents(id, title, category, classification, created_at, summary, user_id)")
+          .eq("party_id", party.id)
+          .limit(10);
+
+        if (partyDocs && partyDocs.length > 0) {
+          // Ambil uploader names
+          const userIds = [...new Set(partyDocs.map((pd: { documents: { user_id: string } | { user_id: string }[] | null }) => {
+            const d = Array.isArray(pd.documents) ? pd.documents[0] : pd.documents;
+            return d?.user_id;
+          }).filter(Boolean))];
+
+          const { data: uploaderProfiles } = await supabase
+            .from("profiles").select("id, full_name").in("id", userIds);
+          const uploaderMap = Object.fromEntries((uploaderProfiles || []).map((p: { id: string; full_name: string }) => [p.id, p.full_name]));
+
+          const docList = partyDocs
+            .map((pd: { documents: { title: string; category: string; classification: string; created_at: string; summary: string | null; user_id: string } | { title: string; category: string; classification: string; created_at: string; summary: string | null; user_id: string }[] | null }) => {
+              const d = Array.isArray(pd.documents) ? pd.documents[0] : pd.documents;
+              if (!d) return null;
+              if (!allowedClassifications.includes(d.classification)) return null;
+              const uploader = uploaderMap[d.user_id] || "Unknown";
+              const summary = d.summary ? ` | Ringkasan: ${d.summary.slice(0, 100)}` : "";
+              return `  - "${d.title}" (${d.category}, ${d.classification}, upload: ${new Date(d.created_at).toLocaleDateString("id-ID")}, oleh: ${uploader}${summary})`;
+            })
+            .filter(Boolean)
+            .join("\n");
+
+          if (docList) {
+            partyContext += "\nDOKUMEN YANG MELIBATKAN \"" + party.name + "\":\n" + docList + "\n";
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[AI] Party search error:", e);
+  }
+
   const metaContext = `DATA ARSIP CLARA (real-time):
 - Total dokumen tersedia: ${totalDocs}
 - Per kategori: ${JSON.stringify(byCategory)}
@@ -229,7 +279,7 @@ INSTRUKSI PENTING:
 
   return NextResponse.json({
     answer,
-    hasContext: !!documentContext || !!exactContext,
+    hasContext: !!documentContext || !!exactContext || !!partyContext,
     docsFound: foundDocs.length,
     usage: { used: used + 1, limit, remaining: isUnlimited ? 999999 : Math.max(0, limit - used - 1), isUnlimited },
   });
