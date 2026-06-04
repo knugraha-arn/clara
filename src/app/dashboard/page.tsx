@@ -44,9 +44,7 @@ interface DocWithUploader extends Document { uploader_name?: string; }
 export default function DashboardPage() {
   const role = useRole();
   const canUpload = ["contributor", "admin", "super_admin"].includes(role);
-  const canDelete = ["contributor", "admin", "super_admin"].includes(role);
-
-  const [documents, setDocuments] = useState<DocWithUploader[]>([]);
+    const [documents, setDocuments] = useState<DocWithUploader[]>([]);
   const [activeCategories, setActiveCategories] = useState<DocumentCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
@@ -75,17 +73,6 @@ export default function DashboardPage() {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
     else { setSortKey(key); setSortDir("asc"); }
     setPage(1);
-  };
-
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!confirm("Hapus dokumen ini?")) return;
-    await fetch(`/api/documents?id=${id}`, { method: "DELETE" });
-    setDocuments(prev => prev.filter(d => d.id !== id));
-    if (selectedDoc?.id === id) setSelectedDoc(null);
-    const res = await fetch("/api/documents");
-    const data = await res.json();
-    setActiveCategories(data.activeCategories || []);
   };
 
   const sorted = [...documents].sort((a, b) => {
@@ -190,14 +177,13 @@ export default function DashboardPage() {
           {/* Document list */}
           <div style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 14, overflow: "hidden" }}>
             {/* Header */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 120px 90px 70px 70px", gap: 10, padding: "10px 16px", borderBottom: "1px solid #F5F5F5", backgroundColor: "#FAFAFA" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 120px 90px 70px", gap: 10, padding: "10px 16px", borderBottom: "1px solid #F5F5F5", backgroundColor: "#FAFAFA" }}>
               <ColHeader label="Dokumen" col="title" />
               <ColHeader label="Klasifikasi" col="classification" />
               <ColHeader label="Kategori" col="category" />
               <span style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em" }}>Diupload oleh</span>
               <ColHeader label="Tgl Upload" col="created_at" />
               <ColHeader label="Ukuran" col="file_size" />
-              <span style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em" }}>Aksi</span>
             </div>
 
             {loading ? (
@@ -223,7 +209,7 @@ export default function DashboardPage() {
                 return (
                   <div key={doc.id}
                     onClick={() => setSelectedDoc(isSelected ? null : doc)}
-                    style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 120px 90px 70px 70px", gap: 10, padding: "12px 16px", borderBottom: i < paginated.length - 1 ? "1px solid #F5F5F5" : "none", backgroundColor: isSelected ? "#F0F5FF" : "white", cursor: "pointer", alignItems: "flex-start", transition: "background 0.1s" }}
+                    style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 120px 90px 70px", gap: 10, padding: "12px 16px", borderBottom: i < paginated.length - 1 ? "1px solid #F5F5F5" : "none", backgroundColor: isSelected ? "#F0F5FF" : "white", cursor: "pointer", alignItems: "flex-start", transition: "background 0.1s" }}
                     onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = "#FAFBFF"; }}
                     onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = "white"; }}
                   >
@@ -257,13 +243,7 @@ export default function DashboardPage() {
                     <span style={{ fontSize: 11, color: "#6B7280", paddingTop: 2 }}>{formatDate(doc.created_at)}</span>
                     {/* Ukuran */}
                     <span style={{ fontSize: 11, color: "#9CA3AF", paddingTop: 2 }}>{formatSize(doc.file_size)}</span>
-                    {/* Aksi — hanya delete */}
-                    <div style={{ display: "flex", gap: 4, paddingTop: 2 }} onClick={e => e.stopPropagation()}>
-                      {canDelete && (
-                        <button onClick={(e) => handleDelete(doc.id, e)} title="Hapus"
-                          style={{ width: 28, height: 28, borderRadius: 7, border: "1px solid #FEE2E2", backgroundColor: "white", cursor: "pointer", fontSize: 13, color: "#EF4444", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
-                      )}
-                    </div>
+
                   </div>
                 );
               })

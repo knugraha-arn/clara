@@ -3,9 +3,8 @@ export type DocumentCategory =
   | "laporan" | "kebijakan" | "undangan" | "pengumuman" | "lainnya";
 
 export type DocumentStatus = "processing" | "ready" | "error";
-
 export type DocumentClassification = "public" | "internal" | "confidential" | "restricted";
-
+export type RetentionPolicy = "standard" | "extended" | "permanent" | "custom";
 export type AuditEventType =
   | "uploaded" | "viewed" | "downloaded" | "deleted"
   | "searched" | "classification_changed" | "role_changed";
@@ -30,8 +29,14 @@ export interface Document {
   classification_confidence: number;
   classification_overridden: boolean;
   classification_override_reason: string | null;
+  retention_date: string | null;
+  retention_policy: RetentionPolicy;
   created_at: string;
   updated_at: string;
+}
+
+export interface DocumentWithUploader extends Document {
+  uploader_name: string;
 }
 
 export interface DocumentLog {
@@ -48,13 +53,22 @@ export interface DocumentLog {
   created_at: string;
 }
 
-export interface DocumentEmbedding {
+export interface MasterDocumentRegister {
+  no_urut: number;
   id: string;
-  document_id: string;
-  chunk_index: number;
-  chunk_text: string;
-  embedding: number[];
-  created_at: string;
+  judul_dokumen: string;
+  nama_file: string;
+  kategori: string;
+  klasifikasi: string;
+  diupload_oleh: string;
+  email_uploader: string;
+  tanggal_upload: string;
+  jumlah_halaman: number | null;
+  ukuran_kb: number;
+  retensi_sampai: string | null;
+  status_retensi: "Active" | "Expiring Soon" | "Expired";
+  tags: string[];
+  ringkasan: string | null;
 }
 
 export interface SearchResult {
@@ -90,9 +104,4 @@ export interface AiAnalysisResult {
   document_date: string | null;
   sender: string | null;
   recipient: string | null;
-}
-
-// Extended document type with uploader info (dari API join)
-export interface DocumentWithUploader extends Document {
-  uploader_name: string;
 }

@@ -22,7 +22,6 @@ export async function GET(
 
   if (!doc) return NextResponse.json({ error: "Dokumen tidak ditemukan" }, { status: 404 });
 
-  // Download file dari storage
   const { data: fileData, error } = await adminSupabase.storage
     .from("documents")
     .download(doc.file_path);
@@ -37,7 +36,6 @@ export async function GET(
     .eq("id", user.id)
     .single();
 
-  // Log audit — hanya untuk force download
   await logEvent({
     supabase: adminSupabase,
     documentId: id,
@@ -50,12 +48,16 @@ export async function GET(
     request,
   });
 
-  // Force download dengan nama file asli
   const arrayBuffer = await fileData.arrayBuffer();
+
+  // RFC 5987 — nama file asli persis, spasi tetap spasi
+  const fileName = doc.file_name;
+  const encodedFileName = encodeURIComponent(fileName);
+
   return new NextResponse(arrayBuffer, {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${encodeURIComponent(doc.file_name)}"`,
+      "Content-Disposition": `attachment; filename="${fileName}"; filename*=UTF-8''${encodedFileName}`,
       "Content-Length": arrayBuffer.byteLength.toString(),
     },
   });
