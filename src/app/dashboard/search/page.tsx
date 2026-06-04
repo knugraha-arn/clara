@@ -30,12 +30,12 @@ const ROLE_LIMITS: Record<string, number> = {
 };
 
 const SUGGESTION_PILLS = [
-  "Kontrak apa yang akan expired tahun ini?",
-  "Dokumen mana yang belum pernah diakses?",
-  "Ada berapa dokumen Confidential?",
-  "Dokumen scan yang perlu direview klasifikasinya?",
-  "Ringkaskan kebijakan yang ada di arsip",
+  "Kontrak apa saja yang melibatkan PT Karvelo?",
+  "Dokumen apa yang akan expired bulan ini?",
+  "Ada berapa dokumen Confidential di arsip?",
   "Siapa yang paling banyak upload dokumen?",
+  "Dokumen apa saja yang diupload minggu ini?",
+  "Ringkaskan kebijakan yang ada di arsip",
 ];
 
 function formatDate(d: string) {
@@ -167,8 +167,8 @@ export default function SearchPage() {
                 {messages.length === 0 && (
                   <div style={{ textAlign: "center", paddingTop: 20 }}>
                     <p style={{ fontSize: 22, color: "#9CA3AF", marginBottom: 6 }}>✦</p>
-                    <p style={{ fontSize: 14, fontWeight: 500, color: "#6B7280", marginBottom: 4 }}>Tanya apa saja tentang arsip dokumen CLARA</p>
-                    <p style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 24 }}>Berbasis data real dari sistem CLARA</p>
+                    <p style={{ fontSize: 14, fontWeight: 500, color: "#6B7280", marginBottom: 4 }}>Ajukan pertanyaan tentang arsip dokumen CLARA</p>
+                    <p style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 24 }}>AI menjawab dalam bahasa natural · Bukan untuk pencarian dokumen</p>
                     {/* Suggestion pills */}
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", maxWidth: 600, margin: "0 auto" }}>
                       {SUGGESTION_PILLS.map(pill => (
@@ -232,7 +232,7 @@ export default function SearchPage() {
                     value={aiInput}
                     onChange={(e) => setAiInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleAiSend()}
-                    placeholder="Tanya tentang arsip dokumen CLARA... (Enter untuk kirim)"
+                    placeholder="Tanya tentang arsip... misal: 'Kontrak apa yang melibatkan PT X?' atau 'Dokumen apa yang expired bulan ini?'"
                     disabled={aiLoading || usage.remaining === 0}
                     style={{ flex: 1, border: "1px solid #E5E7EB", borderRadius: 12, padding: "11px 16px", fontSize: 13, fontFamily: "inherit", outline: "none", opacity: aiLoading || usage.remaining === 0 ? 0.6 : 1 }}
                   />
