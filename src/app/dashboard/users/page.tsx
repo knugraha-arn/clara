@@ -37,9 +37,17 @@ export default function UsersPage() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!canView) return;
+    // Ambil current user ID
+    import("@/lib/supabase/client").then(({ createClient }) => {
+      const supabase = createClient();
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (user) setCurrentUserId(user.id);
+      });
+    });
     fetch("/api/users").then(r => r.json()).then(d => { setUsers(d.users || []); setLoading(false); });
   }, [canView]);
 
@@ -166,7 +174,9 @@ export default function UsersPage() {
 
                   {/* Actions */}
                   <div style={{ display: "flex", gap: 6 }}>
-                    {u.is_suspended ? (
+                    {u.id === currentUserId ? (
+                      <span style={{ fontSize: 11, color: "#9CA3AF", fontStyle: "italic", padding: "6px 0" }}>Akun Anda</span>
+                    ) : u.is_suspended ? (
                       <button
                         onClick={() => handleAction(u.id, "unsuspend")}
                         disabled={isSaving}
