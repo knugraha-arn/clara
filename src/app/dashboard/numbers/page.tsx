@@ -44,7 +44,6 @@ function formatDate(d: string) {
   return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" }).format(new Date(d));
 }
 
-// Modal untuk action dengan note
 function ActionModal({ title, placeholder, onConfirm, onCancel, confirmLabel, confirmColor }:
   { title: string; placeholder: string; onConfirm: (note: string) => void; onCancel: () => void; confirmLabel: string; confirmColor: string }) {
   const [note, setNote] = useState("");
@@ -79,6 +78,7 @@ export default function NumbersPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [yearFilter, setYearFilter] = useState(new Date().getFullYear().toString());
   const [modal, setModal] = useState<{ type: string; id: string; title: string } | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
@@ -97,24 +97,22 @@ export default function NumbersPage() {
 
   const fetchNumbers = useCallback(async () => {
     setLoading(true);
-    const url = statusFilter === "all" ? "/api/document-numbers" : `/api/document-numbers?status=${statusFilter}`;
-    const res = await fetch(url);
+    const params = new URLSearchParams();
+    if (statusFilter !== "all") params.set("status", statusFilter);
+    if (yearFilter) params.set("year", yearFilter);
+    const res = await fetch(`/api/document-numbers?${params}`);
     const data = await res.json();
     setNumbers(data.numbers || []);
     setPendingCount(data.pendingCount || 0);
     setLoading(false);
-  }, [statusFilter]);
+  }, [statusFilter, yearFilter]);
 
   useEffect(() => { fetchNumbers(); }, [fetchNumbers]);
 
-  // Party autocomplete — trigger dari 1 karakter
+  // Party autocomplete
   useEffect(() => {
-    if (formPartyInput.length === 0) { 
-      setFormPartySuggestions([]); 
-      setShowPartySug(false);
-      return; 
-    }
-    setShowPartySug(true); // show dropdown immediately
+    if (formPartyInput.length === 0) { setFormPartySuggestions([]); setShowPartySug(false); return; }
+    setShowPartySug(true);
     const t = setTimeout(async () => {
       const res = await fetch(`/api/parties?q=${encodeURIComponent(formPartyInput)}`);
       const data = await res.json();
@@ -123,7 +121,7 @@ export default function NumbersPage() {
     return () => clearTimeout(t);
   }, [formPartyInput]);
 
-  // Preview nomor surat
+  // Preview nomor
   useEffect(() => {
     if (!formPartyInput.trim()) { setPreviewNumber(""); return; }
     const d = new Date(formDate);
@@ -171,21 +169,55 @@ export default function NumbersPage() {
     setSubmitting(false);
   };
 
+  const handleExportCSV = () => {
+    if (!numbers.length) return;
+    const headers = ["Nomor Surat", "Perihal", "Jenis", "Klasifikasi", "Pihak", "Tanggal", "Status", "Dibuat Oleh", "Direview Oleh", "Catatan Review", "Dibuat"];
+    const rows = numbers.map(n => [
+      n.number,
+      `"${(n.description || "").replace(/"/g, '""')}"`,
+      CAT_LABELS[n.category] || n.category,
+      n.classification,
+      n.party_name,
+      formatDate(n.date),
+      n.status,
+      n.created_by_name || "",
+      n.reviewed_by_name || "",
+      `"${(n.review_note || "").replace(/"/g, '""')}"`,
+      formatDate(n.created_at),
+    ]);
+    const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `CLARA_NomorSurat_${yearFilter}_${new Date().toISOString().split("T")[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const today = new Date().toISOString().split("T")[0];
   const isBackdated = formDate < today;
   const pendingNumbers = numbers.filter(n => n.status === "pending");
-  const filteredNumbers = numbers.filter(n => statusFilter === "all" || n.status === statusFilter);
 
-  // Alert: issued > 30 hari tanpa dokumen
-  const alertNumbers = numbers.filter(n => {
+  // Alert: issued > 30 hari
+  const overdueNumbers = numbers.filter(n => {
     if (n.status !== "issued") return false;
-    const diff = (Date.now() - new Date(n.created_at).getTime()) / (1000 * 60 * 60 * 24);
-    return diff > 30;
+    return (Date.now() - new Date(n.created_at).getTime()) / (1000 * 60 * 60 * 24) > 30;
   });
+
+  // Alert: pending > 7 hari
+  const stalePendingNumbers = numbers.filter(n => {
+    if (n.status !== "pending") return false;
+    return (Date.now() - new Date(n.created_at).getTime()) / (1000 * 60 * 60 * 24) > 7;
+  });
+
+  const filteredNumbers = numbers;
+  const availableYears = [2024, 2025, 2026, 2027].map(y => y.toString());
 
   return (
     <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
-      {/* Modal */}
       {modal && (
         <ActionModal
           title={modal.title}
@@ -206,56 +238,66 @@ export default function NumbersPage() {
               <span style={{ marginLeft: 8, fontSize: 11, backgroundColor: "#DC2626", color: "white", padding: "2px 8px", borderRadius: 999, fontWeight: 600 }}>{pendingCount}</span>
             )}
           </h1>
-          <p style={{ fontSize: 12, color: "#9CA3AF", margin: "2px 0 0" }}>Sistem penomoran dokumen resmi</p>
+          <p style={{ fontSize: 12, color: "#9CA3AF", margin: "2px 0 0" }}>Sistem penomoran dokumen resmi · {filteredNumbers.length} nomor</p>
         </div>
-        {canCreate && (
-          <button onClick={() => setShowForm(!showForm)}
-            style={{ backgroundColor: showForm ? "#F3F4F6" : "#0344D8", color: showForm ? "#374151" : "white", border: "none", borderRadius: 10, padding: "8px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
-            {showForm ? "✕ Tutup" : "+ Buat Nomor Surat"}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={handleExportCSV} disabled={!numbers.length}
+            style={{ backgroundColor: "#1A1F2E", color: "white", border: "none", borderRadius: 10, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", opacity: !numbers.length ? 0.5 : 1 }}>
+            ⬇️ CSV
           </button>
-        )}
+          {canCreate && (
+            <button onClick={() => setShowForm(!showForm)}
+              style={{ backgroundColor: showForm ? "#F3F4F6" : "#0344D8", color: showForm ? "#374151" : "white", border: "none", borderRadius: 10, padding: "8px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+              {showForm ? "✕ Tutup" : "+ Buat Nomor Surat"}
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={{ padding: "20px 28px" }}>
 
-        {/* Alert: issued > 30 hari */}
-        {alertNumbers.length > 0 && (
-          <div style={{ backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 10, padding: "12px 16px", marginBottom: 16, display: "flex", gap: 8 }}>
-            <span style={{ fontSize: 16 }}>🔴</span>
+        {/* Alerts */}
+        {stalePendingNumbers.length > 0 && isAdmin && (
+          <div style={{ backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 10, padding: "12px 16px", marginBottom: 10, display: "flex", gap: 8 }}>
+            <span>🔴</span>
             <p style={{ fontSize: 13, color: "#DC2626", margin: 0, fontWeight: 500 }}>
-              {alertNumbers.length} nomor surat sudah Issued lebih dari 30 hari tanpa dokumen terlampir.
-              <span style={{ fontWeight: 400, color: "#7F1D1D" }}> Segera upload dokumen atau void nomor tersebut.</span>
+              {stalePendingNumbers.length} nomor backdated sudah menunggu approval lebih dari 7 hari — segera ditindaklanjuti.
+            </p>
+          </div>
+        )}
+        {overdueNumbers.length > 0 && (
+          <div style={{ backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 10, padding: "12px 16px", marginBottom: 16, display: "flex", gap: 8 }}>
+            <span>⚠️</span>
+            <p style={{ fontSize: 13, color: "#DC2626", margin: 0, fontWeight: 500 }}>
+              {overdueNumbers.length} nomor surat sudah Issued lebih dari 30 hari tanpa dokumen terlampir.
             </p>
           </div>
         )}
 
-        {/* Form buat nomor */}
+        {/* Form */}
         {showForm && canCreate && (
           <div style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 14, padding: 20, marginBottom: 20 }}>
             <p style={{ fontSize: 14, fontWeight: 700, color: "#1A1F2E", margin: "0 0 16px" }}>Buat Nomor Surat Baru</p>
 
-            {/* Preview nomor */}
             {previewNumber && (
               <div style={{ backgroundColor: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 10, padding: "10px 16px", marginBottom: 16, textAlign: "center" }}>
                 <p style={{ fontSize: 11, color: "#6B7280", margin: "0 0 2px" }}>Preview Nomor Surat</p>
-                <p style={{ fontSize: 20, fontWeight: 800, color: "#0344D8", margin: 0, letterSpacing: "0.5px" }}>{previewNumber}</p>
+                <p style={{ fontSize: 22, fontWeight: 800, color: "#0344D8", margin: 0, letterSpacing: "0.5px" }}>{previewNumber}</p>
                 {isBackdated && (
                   <p style={{ fontSize: 11, color: "#D97706", margin: "4px 0 0", fontWeight: 600 }}>
-                    ⚠️ Backdated — {["contributor"].includes(role) ? "memerlukan approval Admin" : "akan langsung Issued"}
+                    ⚠️ Backdated · {role === "contributor" ? "Memerlukan approval Admin" : "Langsung Issued"}
                   </p>
                 )}
               </div>
             )}
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              {/* Tanggal */}
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", display: "block", marginBottom: 4 }}>Tanggal Surat</label>
                 <input type="date" value={formDate} onChange={e => setFormDate(e.target.value)}
                   style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "8px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />
               </div>
 
-              {/* Kategori */}
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", display: "block", marginBottom: 4 }}>Jenis Dokumen</label>
                 <select value={formCategory} onChange={e => setFormCategory(e.target.value)}
@@ -264,15 +306,10 @@ export default function NumbersPage() {
                 </select>
               </div>
 
-              {/* Party */}
               <div style={{ position: "relative" }}>
                 <label style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", display: "block", marginBottom: 4 }}>Pihak <span style={{ color: "#DC2626" }}>*</span></label>
                 <input ref={partyInputRef} type="text" value={formPartyInput}
-                  onChange={e => { 
-                    setFormPartyInput(e.target.value); 
-                    setFormPartyId(null);
-                    if (e.target.value.length > 0) setShowPartySug(true);
-                  }}
+                  onChange={e => { setFormPartyInput(e.target.value); setFormPartyId(null); if (e.target.value.length > 0) setShowPartySug(true); }}
                   onFocus={() => { if (formPartyInput.length > 0) setShowPartySug(true); }}
                   placeholder="Ketik nama pihak..."
                   style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "8px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />
@@ -288,7 +325,7 @@ export default function NumbersPage() {
                       </div>
                     ))}
                     {!formPartySuggestions.some(s => s.name.toLowerCase() === formPartyInput.toLowerCase()) && (
-                      <div onClick={() => { setShowPartySug(false); }}
+                      <div onClick={() => setShowPartySug(false)}
                         style={{ padding: "8px 12px", cursor: "pointer", fontSize: 12, color: "#16A34A", fontWeight: 600, borderTop: "1px solid #F3F4F6" }}>
                         + Gunakan "{formPartyInput.toUpperCase()}" sebagai pihak baru
                       </div>
@@ -297,7 +334,6 @@ export default function NumbersPage() {
                 )}
               </div>
 
-              {/* Klasifikasi */}
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", display: "block", marginBottom: 4 }}>Klasifikasi</label>
                 <select value={formClassification} onChange={e => setFormClassification(e.target.value)}
@@ -310,7 +346,6 @@ export default function NumbersPage() {
               </div>
             </div>
 
-            {/* Perihal */}
             <div style={{ marginTop: 12 }}>
               <label style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", display: "block", marginBottom: 4 }}>Perihal / Uraian <span style={{ color: "#DC2626" }}>*</span></label>
               <textarea value={formDescription} onChange={e => setFormDescription(e.target.value)} rows={2}
@@ -331,66 +366,74 @@ export default function NumbersPage() {
           </div>
         )}
 
-        {/* Pending approval section — khusus admin */}
+        {/* Pending approval */}
         {isAdmin && pendingNumbers.length > 0 && (
           <div style={{ backgroundColor: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 14, padding: 20, marginBottom: 20 }}>
             <p style={{ fontSize: 14, fontWeight: 700, color: "#D97706", margin: "0 0 14px" }}>⏳ Menunggu Approval ({pendingNumbers.length})</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {pendingNumbers.map(num => (
-                <div key={num.id} style={{ backgroundColor: "white", border: "1px solid #FDE68A", borderRadius: 10, padding: "12px 16px" }}>
-                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                        <span style={{ fontSize: 14, fontWeight: 800, color: "#1A1F2E", letterSpacing: "0.3px" }}>{num.number}</span>
-                        <span style={{ fontSize: 10, backgroundColor: "#FEF2F2", color: "#DC2626", padding: "1px 6px", borderRadius: 4, fontWeight: 600 }}>Backdated</span>
+              {pendingNumbers.map(num => {
+                const daysPending = Math.floor((Date.now() - new Date(num.created_at).getTime()) / (1000 * 60 * 60 * 24));
+                return (
+                  <div key={num.id} style={{ backgroundColor: "white", border: `1px solid ${daysPending > 7 ? "#FECACA" : "#FDE68A"}`, borderRadius: 10, padding: "12px 16px" }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                          <span style={{ fontSize: 14, fontWeight: 800, color: "#1A1F2E" }}>{num.number}</span>
+                          <span style={{ fontSize: 10, backgroundColor: "#FEF2F2", color: "#DC2626", padding: "1px 6px", borderRadius: 4, fontWeight: 600 }}>Backdated</span>
+                          {daysPending > 7 && <span style={{ fontSize: 10, backgroundColor: "#FEF2F2", color: "#DC2626", padding: "1px 6px", borderRadius: 4, fontWeight: 600 }}>⚠️ {daysPending} hari</span>}
+                        </div>
+                        <p style={{ fontSize: 12, color: "#6B7280", margin: "0 0 2px" }}>{num.description}</p>
+                        <p style={{ fontSize: 11, color: "#9CA3AF", margin: 0 }}>{CAT_LABELS[num.category]} · {formatDate(num.date)} · oleh: {num.created_by_name}</p>
                       </div>
-                      <p style={{ fontSize: 12, color: "#6B7280", margin: "0 0 2px" }}>{num.description}</p>
-                      <p style={{ fontSize: 11, color: "#9CA3AF", margin: 0 }}>
-                        {CAT_LABELS[num.category] || num.category} · {formatDate(num.date)} · oleh: {num.created_by_name}
-                      </p>
-                    </div>
-                    <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                      <button onClick={() => handleAction(num.id, "approve")} disabled={!!actionLoading}
-                        style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #BBF7D0", backgroundColor: "#F0FDF4", color: "#16A34A", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
-                        ✅ Approve
-                      </button>
-                      <button onClick={() => setModal({ type: "revision", id: num.id, title: "Minta Revisi" })}
-                        style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #FDE68A", backgroundColor: "#FFFBEB", color: "#D97706", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
-                        ✏️ Revisi
-                      </button>
-                      <button onClick={() => setModal({ type: "reject", id: num.id, title: "Tolak Nomor Surat" })}
-                        style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #FECACA", backgroundColor: "#FEF2F2", color: "#DC2626", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
-                        ❌ Tolak
-                      </button>
+                      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                        <button onClick={() => handleAction(num.id, "approve")} disabled={!!actionLoading}
+                          style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #BBF7D0", backgroundColor: "#F0FDF4", color: "#16A34A", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                          ✅ Approve
+                        </button>
+                        <button onClick={() => setModal({ type: "revision", id: num.id, title: "Minta Revisi" })}
+                          style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #FDE68A", backgroundColor: "#FFFBEB", color: "#D97706", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                          ✏️ Revisi
+                        </button>
+                        <button onClick={() => setModal({ type: "reject", id: num.id, title: "Tolak Nomor Surat" })}
+                          style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #FECACA", backgroundColor: "#FEF2F2", color: "#DC2626", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                          ❌ Tolak
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
 
-        {/* Filter */}
-        <div style={{ display: "flex", gap: 4, marginBottom: 14, flexWrap: "wrap" }}>
-          {[
-            { value: "all", label: "Semua" },
-            { value: "draft", label: "✏️ Draft" },
-            { value: "pending", label: "⏳ Pending" },
-            { value: "issued", label: "✅ Issued" },
-            { value: "linked", label: "🔗 Linked" },
-            { value: "rejected", label: "❌ Rejected" },
-            { value: "void", label: "⊘ Void" },
-          ].map(f => (
-            <button key={f.value} onClick={() => setStatusFilter(f.value)}
-              style={{ padding: "5px 12px", borderRadius: 7, fontSize: 12, fontWeight: 500, border: "1px solid", cursor: "pointer", fontFamily: "inherit", backgroundColor: statusFilter === f.value ? "#1A1F2E" : "white", color: statusFilter === f.value ? "white" : "#6B7280", borderColor: statusFilter === f.value ? "#1A1F2E" : "#E5E7EB" }}>
-              {f.label}
-            </button>
-          ))}
+        {/* Filters */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 14, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 4 }}>
+            {[
+              { value: "all", label: "Semua" },
+              { value: "draft", label: "✏️ Draft" },
+              { value: "pending", label: "⏳ Pending" },
+              { value: "issued", label: "✅ Issued" },
+              { value: "linked", label: "🔗 Linked" },
+              { value: "rejected", label: "❌ Rejected" },
+              { value: "void", label: "⊘ Void" },
+            ].map(f => (
+              <button key={f.value} onClick={() => setStatusFilter(f.value)}
+                style={{ padding: "5px 12px", borderRadius: 7, fontSize: 12, fontWeight: 500, border: "1px solid", cursor: "pointer", fontFamily: "inherit", backgroundColor: statusFilter === f.value ? "#1A1F2E" : "white", color: statusFilter === f.value ? "white" : "#6B7280", borderColor: statusFilter === f.value ? "#1A1F2E" : "#E5E7EB" }}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <select value={yearFilter} onChange={e => setYearFilter(e.target.value)}
+            style={{ border: "1px solid #E5E7EB", borderRadius: 8, padding: "5px 10px", fontSize: 12, fontFamily: "inherit", outline: "none", color: "#374151" }}>
+            {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
         </div>
 
-        {/* List nomor */}
+        {/* List */}
         <div style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 14, overflow: "hidden" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "180px 1fr 110px 110px 90px 100px 120px", gap: 10, padding: "10px 16px", borderBottom: "1px solid #F5F5F5", backgroundColor: "#FAFAFA" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "190px 1fr 110px 110px 90px 100px 140px", gap: 10, padding: "10px 16px", borderBottom: "1px solid #F5F5F5", backgroundColor: "#FAFAFA" }}>
             {["Nomor Surat", "Perihal", "Jenis", "Klasifikasi", "Tanggal", "Status", "Aksi"].map(h => (
               <span key={h} style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</span>
             ))}
@@ -412,7 +455,7 @@ export default function NumbersPage() {
 
               return (
                 <div key={num.id}
-                  style={{ display: "grid", gridTemplateColumns: "180px 1fr 110px 110px 90px 100px 120px", gap: 10, padding: "12px 16px", borderBottom: i < filteredNumbers.length - 1 ? "1px solid #F5F5F5" : "none", alignItems: "flex-start", backgroundColor: isOverdue ? "#FFF8F8" : "white" }}
+                  style={{ display: "grid", gridTemplateColumns: "190px 1fr 110px 110px 90px 100px 140px", gap: 10, padding: "12px 16px", borderBottom: i < filteredNumbers.length - 1 ? "1px solid #F5F5F5" : "none", alignItems: "flex-start", backgroundColor: isOverdue ? "#FFF8F8" : "white" }}
                   onMouseEnter={e => { if (!isOverdue) e.currentTarget.style.backgroundColor = "#FAFBFF"; }}
                   onMouseLeave={e => e.currentTarget.style.backgroundColor = isOverdue ? "#FFF8F8" : "white"}
                 >
@@ -420,12 +463,13 @@ export default function NumbersPage() {
                     <p style={{ fontSize: 13, fontWeight: 800, color: "#1A1F2E", margin: "0 0 2px", letterSpacing: "0.3px" }}>{num.number}</p>
                     <p style={{ fontSize: 11, color: "#9CA3AF", margin: 0 }}>{num.created_by_name}</p>
                     {num.is_backdated && <span style={{ fontSize: 10, backgroundColor: "#FFFBEB", color: "#D97706", padding: "1px 5px", borderRadius: 4, fontWeight: 600 }}>Backdated</span>}
-                    {num.review_note && (num.status === "draft" || num.status === "rejected") && (
+                    {num.review_note && ["draft", "rejected"].includes(num.status) && (
                       <p style={{ fontSize: 10, color: "#DC2626", margin: "3px 0 0", fontStyle: "italic" }}>💬 {num.review_note}</p>
                     )}
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <p style={{ fontSize: 12, color: "#374151", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{num.description}</p>
+                    {num.document_id && <p style={{ fontSize: 10, color: "#16A34A", margin: "2px 0 0" }}>🔗 Dokumen terlampir</p>}
                   </div>
                   <span style={{ fontSize: 11, color: "#6B7280" }}>{CAT_LABELS[num.category] || num.category}</span>
                   <div>
@@ -439,14 +483,17 @@ export default function NumbersPage() {
                     {isOverdue && <p style={{ fontSize: 10, color: "#DC2626", margin: "3px 0 0" }}>⚠️ &gt;30 hari</p>}
                   </div>
                   <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                    {/* Resubmit — untuk contributor dengan draft */}
-                    {num.status === "draft" && num.created_by && (
+                    {num.status === "draft" && (
                       <button onClick={() => handleAction(num.id, "resubmit")}
                         style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #C7D2FE", backgroundColor: "#EEF2FF", color: "#0344D8", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
                         Resubmit
                       </button>
                     )}
-                    {/* Void — admin, hanya untuk issued/linked */}
+                    {num.status === "issued" && (
+                      <a href="/dashboard" style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #BBF7D0", backgroundColor: "#F0FDF4", color: "#16A34A", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", textDecoration: "none" }}>
+                        ⬆️ Upload
+                      </a>
+                    )}
                     {isAdmin && ["issued", "linked"].includes(num.status) && (
                       <button onClick={() => setModal({ type: "void", id: num.id, title: "Void Nomor Surat" })}
                         style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #E5E7EB", backgroundColor: "white", color: "#9CA3AF", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>

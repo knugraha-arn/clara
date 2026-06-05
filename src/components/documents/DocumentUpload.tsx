@@ -61,6 +61,10 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
   const [overrideReason, setOverrideReason] = useState("");
   const [duplicates, setDuplicates] = useState<DuplicateDoc[]>([]);
 
+  // Nomor surat state
+  const [issuedNumbers, setIssuedNumbers] = useState<{ id: string; number: string; description: string }[]>([]);
+  const [selectedDocNumber, setSelectedDocNumber] = useState<string>("");
+
   // Party state
   const [parties, setParties] = useState<Party[]>([]);
   const [partyInput, setPartyInput] = useState("");
@@ -190,6 +194,14 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
       setEditedSummary(data.document.summary || "");
       setSelectedClassification(data.document.classification_ai_suggestion || data.document.classification);
       setSelectedCategory(data.document.category || "lainnya");
+
+      // Fetch issued numbers untuk linking
+      try {
+        const numRes = await fetch("/api/document-numbers?status=issued");
+        const numData = await numRes.json();
+        setIssuedNumbers(numData.numbers || []);
+      } catch { setIssuedNumbers([]); }
+
       setStage("confirm");
 
     } catch (err) {
@@ -237,6 +249,15 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
         });
       }
 
+      // Link ke nomor surat jika dipilih
+      if (selectedDocNumber) {
+        await fetch(`/api/document-numbers/${selectedDocNumber}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "link_document", documentId: aiSuggestion.documentId }),
+        });
+      }
+
       setStage("done"); setMessage("Dokumen berhasil diproses!");
       setTimeout(() => {
         setSelectedFile(null); setTitle(""); setStage("idle"); setProgress(0);
@@ -244,6 +265,8 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
         setSelectedCategory(""); setCustomCategory(""); setEditedSummary("");
         setParties([]); setPartyInput("");
         setDuplicates([]);
+        setSelectedDocNumber("");
+        setIssuedNumbers([]);
         onSuccess?.();
       }, 1500);
 
@@ -259,6 +282,7 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
     setAiSuggestion(null); setStoragePath(""); setOverrideReason("");
     setSelectedCategory(""); setCustomCategory(""); setEditedSummary("");
     setParties([]); setPartyInput(""); setDuplicates([]);
+    setSelectedDocNumber(""); setIssuedNumbers([]);
   };
 
   const isOverride = aiSuggestion && selectedClassification !== aiSuggestion.classification;
@@ -520,6 +544,30 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
                 </div>
               </div>
             )}
+
+            {/* Link ke nomor surat */}
+            <div>
+              <p style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Hubungkan ke Nomor Surat
+                <span style={{ marginLeft: 6, fontSize: 10, color: "#9CA3AF", fontWeight: 400, textTransform: "none" }}>opsional</span>
+              </p>
+              {issuedNumbers.length === 0 ? (
+                <p style={{ fontSize: 12, color: "#9CA3AF", fontStyle: "italic" }}>Tidak ada nomor surat yang menunggu dokumen</p>
+              ) : (
+                <select value={selectedDocNumber} onChange={e => setSelectedDocNumber(e.target.value)}
+                  style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "8px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", backgroundColor: selectedDocNumber ? "#F0FDF4" : "white", borderColor: selectedDocNumber ? "#16A34A" : "#E5E7EB" }}>
+                  <option value="">— Pilih nomor surat (opsional) —</option>
+                  {issuedNumbers.map(n => (
+                    <option key={n.id} value={n.id}>{n.number} · {n.description}</option>
+                  ))}
+                </select>
+              )}
+              {selectedDocNumber && (
+                <p style={{ fontSize: 11, color: "#16A34A", margin: "4px 0 0", fontWeight: 500 }}>
+                  ✓ Dokumen akan di-link ke nomor surat ini — status berubah ke Linked
+                </p>
+              )}
+            </div>
 
             {/* Action buttons */}
             <div style={{ display: "flex", gap: 8, paddingTop: 4, borderTop: "1px solid #F3F4F6" }}>
