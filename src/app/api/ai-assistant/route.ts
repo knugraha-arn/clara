@@ -14,6 +14,12 @@ const DAILY_LIMITS: Record<string, number> = {
   super_admin: 999999,
 };
 
+const CAT_LABELS: Record<string, string> = {
+  surat_masuk: "Surat Masuk", surat_keluar: "Surat Keluar", kontrak: "Kontrak",
+  memo: "Memo", laporan: "Laporan", kebijakan: "Kebijakan",
+  undangan: "Undangan", pengumuman: "Pengumuman", lainnya: "Lainnya",
+};
+
 // GET — cek usage hari ini
 export async function GET() {
   const supabase = await createClient();
@@ -74,97 +80,111 @@ export async function POST(request: NextRequest) {
     ? ["public", "internal", "confidential"]
     : ["public", "internal"];
 
-  // 1. Semantic search — ambil dokumen relevan
-  let documentContext = "";
-  let foundDocs: { title: string; category: string; classification: string }[] = [];
+  // ============================================================
+  // 1. AMBIL SEMUA DOKUMEN LENGKAP
+  // ============================================================
+  type DocType = {
+    id: string; title: string; file_name: string; category: string; classification: string;
+    summary: string | null; tags: string[]; retention_date: string | null;
+    created_at: string; is_scanned: boolean; user_id: string; page_count: number | null; file_size: number;
+  };
 
-  try {
-    const queryEmbedding = await embedSearchQuery(question);
-    const { data: semanticResults } = await supabase.rpc("search_documents_semantic_all", {
-      query_embedding: JSON.stringify(queryEmbedding),
-      match_threshold: 0.25, // lebih rendah untuk tangkap lebih banyak
-      match_count: 10,
-    });
-
-    if (semanticResults?.length > 0) {
-      const docIds = [...new Set(semanticResults.map((r: { document_id: string }) => r.document_id))];
-      const { data: docs } = await supabase
-        .from("documents")
-        .select("id, title, summary, category, classification, retention_date, created_at, tags, file_name")
-        .in("id", docIds)
-        .in("classification", allowedClassifications)
-        .eq("status", "ready");
-
-      if (docs && docs.length > 0) {
-        foundDocs = docs;
-        type DocType = { id: string; title: string; summary: string | null; category: string; classification: string; retention_date: string | null; created_at: string; tags: string[]; file_name: string };
-        const docMap = Object.fromEntries(docs.map((d: DocType) => [d.id, d]));
-
-        const relevantChunks = semanticResults
-          .filter((r: { document_id: string }) => docMap[r.document_id])
-          .slice(0, 6);
-
-        documentContext = relevantChunks.map((r: { document_id: string; chunk_text: string; similarity: number }) => {
-          const doc = docMap[r.document_id] as DocType;
-          if (!doc) return "";
-          return `[DOKUMEN: "${doc.title}"]
-- Nama file: ${doc.file_name}
-- Kategori: ${doc.category} | Klasifikasi: ${doc.classification}
-- Retensi: ${doc.retention_date ? new Date(doc.retention_date).toLocaleDateString("id-ID") : "tidak diset"}
-- Ringkasan: ${doc.summary || "tidak ada ringkasan"}
-- Tags: ${doc.tags?.join(", ") || "-"}
-- Konten relevan: ${r.chunk_text.slice(0, 400)}
-- Similarity score: ${Math.round(r.similarity * 100)}%`;
-        }).filter(Boolean).join("\n\n---\n\n");
-      }
-    }
-  } catch (e) {
-    console.error("[AI] Semantic search error:", e);
-  }
-
-  // 2. Juga cari exact match berdasarkan keyword dari pertanyaan
-  let exactContext = "";
-  try {
-    const { data: exactDocs } = await supabase
-      .from("documents")
-      .select("id, title, summary, category, classification, retention_date, created_at, tags")
-      .in("classification", allowedClassifications)
-      .eq("status", "ready")
-      .or(`title.ilike.%${question.slice(0, 50)}%,summary.ilike.%${question.slice(0, 50)}%`)
-      .limit(3);
-
-    if (exactDocs && exactDocs.length > 0) {
-      const newDocs = (exactDocs as { id: string; title: string; category: string; classification: string; retention_date: string | null; summary: string | null }[]).filter(d => !foundDocs.find(f => f.title === d.title));
-      if (newDocs.length > 0) {
-        exactContext = "\n\nDOKUMEN DITEMUKAN VIA KEYWORD:\n" + newDocs.map((d: {
-          title: string; category: string; classification: string; retention_date: string | null; summary: string | null;
-        }) => `[${d.title}] — ${d.category} | ${d.classification} | Retensi: ${d.retention_date ? new Date(d.retention_date).toLocaleDateString("id-ID") : "tidak diset"} | ${d.summary || ""}`).join("\n");
-      }
-    }
-  } catch (e) {
-    console.error("[AI] Exact search error:", e);
-  }
-
-  // 3. Metadata real-time
-  type AllDocType = { id: string; title: string; category: string; classification: string; retention_date: string | null; created_at: string; is_scanned: boolean; tags: string[] };
   const { data: allDocsRaw } = await supabase
     .from("documents")
-    .select("id, title, category, classification, retention_date, created_at, is_scanned, tags")
+    .select("id, title, file_name, category, classification, summary, tags, retention_date, created_at, is_scanned, user_id, page_count, file_size")
     .in("classification", allowedClassifications)
-    .eq("status", "ready");
-  const allDocs = (allDocsRaw || []) as AllDocType[];
+    .eq("status", "ready")
+    .order("created_at", { ascending: false });
 
+  const allDocs = (allDocsRaw || []) as DocType[];
+
+  // Ambil nama uploader
+  const userIds = [...new Set(allDocs.map(d => d.user_id))];
+  const { data: profiles } = await supabase.from("profiles").select("id, full_name, email").in("id", userIds);
+  const profileMap = Object.fromEntries((profiles || []).map((p: { id: string; full_name: string; email: string }) => [p.id, p.full_name || p.email]));
+
+  // Ambil semua parties per dokumen
+  const { data: allDocParties } = await supabase
+    .from("document_parties")
+    .select("document_id, parties(name)")
+    .in("document_id", allDocs.map(d => d.id));
+
+  type DocPartyRow = { document_id: string; parties: { name: string } | { name: string }[] | null };
+  const partyMap: Record<string, string[]> = {};
+  (allDocParties || []).forEach((dp: DocPartyRow) => {
+    const name = Array.isArray(dp.parties) ? dp.parties[0]?.name : dp.parties?.name;
+    if (name) {
+      if (!partyMap[dp.document_id]) partyMap[dp.document_id] = [];
+      partyMap[dp.document_id].push(name);
+    }
+  });
+
+  // ============================================================
+  // 2. AMBIL SEMUA NOMOR SURAT
+  // ============================================================
+  const { data: allNumbers } = await supabase
+    .from("document_numbers")
+    .select("number, party_name, category, classification, description, status, date, created_by_name, document_id")
+    .order("date", { ascending: false });
+
+  // ============================================================
+  // 3. STATISTIK
+  // ============================================================
   const totalDocs = allDocs.length;
-  const byCategory = allDocs.reduce((acc: Record<string, number>, d: AllDocType) => {
+
+  const byClassification = allDocs.reduce((acc: Record<string, number>, d) => {
+    acc[d.classification] = (acc[d.classification] || 0) + 1; return acc;
+  }, {});
+
+  const byCategory = allDocs.reduce((acc: Record<string, number>, d) => {
     acc[d.category] = (acc[d.category] || 0) + 1; return acc;
   }, {});
-  const expiringDocs = allDocs.filter((d: AllDocType) => {
+
+  const totalSizeMB = (allDocs.reduce((sum, d) => sum + (d.file_size || 0), 0) / (1024 * 1024)).toFixed(1);
+
+  const expiringDocs = allDocs.filter(d => {
     if (!d.retention_date) return false;
     const diff = (new Date(d.retention_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
     return diff >= 0 && diff <= 30;
   });
 
-  // Query dokumen by party name jika ada keyword yang cocok
+  const expiredDocs = allDocs.filter(d => {
+    if (!d.retention_date) return false;
+    return new Date(d.retention_date) < new Date();
+  });
+
+  // ============================================================
+  // 4. SEMANTIC SEARCH untuk konteks relevan
+  // ============================================================
+  let semanticContext = "";
+  try {
+    const queryEmbedding = await embedSearchQuery(question);
+    const { data: semanticResults } = await supabase.rpc("search_documents_semantic_all", {
+      query_embedding: JSON.stringify(queryEmbedding),
+      match_threshold: 0.25,
+      match_count: 5,
+    });
+
+    if (semanticResults?.length > 0) {
+      const docIds = [...new Set(semanticResults.map((r: { document_id: string }) => r.document_id))];
+      const relevantDocs = allDocs.filter(d => docIds.includes(d.id));
+
+      if (relevantDocs.length > 0) {
+        semanticContext = "DOKUMEN PALING RELEVAN (semantic search):\n" + relevantDocs.map(d => {
+          const parties = partyMap[d.id]?.join(", ") || "tidak ada";
+          const uploader = profileMap[d.user_id] || "Unknown";
+          const chunk = semanticResults.find((r: { document_id: string; chunk_text: string }) => r.document_id === d.id);
+          return `- "${d.title}" | ${CAT_LABELS[d.category] || d.category} | ${d.classification} | Pihak: ${parties} | Upload: ${uploader} | ${d.summary?.slice(0, 100) || ""}\n  Konten: ${chunk?.chunk_text?.slice(0, 200) || ""}`;
+        }).join("\n");
+      }
+    }
+  } catch (e) {
+    console.error("[AI] Semantic error:", e);
+  }
+
+  // ============================================================
+  // 5. PARTY CONTEXT
+  // ============================================================
   let partyContext = "";
   try {
     const { data: matchingParties } = await supabase
@@ -175,83 +195,97 @@ export async function POST(request: NextRequest) {
 
     if (matchingParties && matchingParties.length > 0) {
       for (const party of matchingParties) {
-        const { data: partyDocs } = await supabase
-          .from("document_parties")
-          .select("document_id, documents(id, title, category, classification, created_at, summary, user_id)")
-          .eq("party_id", party.id)
-          .limit(10);
-
-        if (partyDocs && partyDocs.length > 0) {
-          // Ambil uploader names
-          const userIds = [...new Set(partyDocs.map((pd: { documents: { user_id: string } | { user_id: string }[] | null }) => {
-            const d = Array.isArray(pd.documents) ? pd.documents[0] : pd.documents;
-            return d?.user_id;
-          }).filter(Boolean))];
-
-          const { data: uploaderProfiles } = await supabase
-            .from("profiles").select("id, full_name").in("id", userIds);
-          const uploaderMap = Object.fromEntries((uploaderProfiles || []).map((p: { id: string; full_name: string }) => [p.id, p.full_name]));
-
-          const docList = partyDocs
-            .map((pd: { documents: { title: string; category: string; classification: string; created_at: string; summary: string | null; user_id: string } | { title: string; category: string; classification: string; created_at: string; summary: string | null; user_id: string }[] | null }) => {
-              const d = Array.isArray(pd.documents) ? pd.documents[0] : pd.documents;
-              if (!d) return null;
-              if (!allowedClassifications.includes(d.classification)) return null;
-              const uploader = uploaderMap[d.user_id] || "Unknown";
-              const summary = d.summary ? ` | Ringkasan: ${d.summary.slice(0, 100)}` : "";
-              return `  - "${d.title}" (${d.category}, ${d.classification}, upload: ${new Date(d.created_at).toLocaleDateString("id-ID")}, oleh: ${uploader}${summary})`;
-            })
-            .filter(Boolean)
-            .join("\n");
-
-          if (docList) {
-            partyContext += "\nDOKUMEN YANG MELIBATKAN \"" + party.name + "\":\n" + docList + "\n";
-          }
+        const docsWithParty = allDocs.filter(d => partyMap[d.id]?.includes(party.name));
+        if (docsWithParty.length > 0) {
+          partyContext += `\nDOKUMEN YANG MELIBATKAN "${party.name}":\n`;
+          partyContext += docsWithParty.map(d => {
+            const uploader = profileMap[d.user_id] || "Unknown";
+            return `  - "${d.title}" (${CAT_LABELS[d.category] || d.category}, ${d.classification}, ${new Date(d.created_at).toLocaleDateString("id-ID")}, oleh: ${uploader}${d.summary ? ", ringkasan: " + d.summary.slice(0, 80) : ""})`;
+          }).join("\n");
         }
       }
     }
   } catch (e) {
-    console.error("[AI] Party search error:", e);
+    console.error("[AI] Party error:", e);
   }
 
-  const metaContext = `DATA ARSIP CLARA (real-time):
-- Total dokumen tersedia: ${totalDocs}
-- Per kategori: ${JSON.stringify(byCategory)}
-- Dokumen akan expired dalam 30 hari: ${expiringDocs.length}${expiringDocs.length > 0 ? " (" + expiringDocs.slice(0, 3).map((d: AllDocType) => d.title).join(", ") + ")" : ""}
-- Dokumen scan: ${allDocs.filter((d: AllDocType) => d.is_scanned).length}`;
+  // ============================================================
+  // 6. BUILD FULL CONTEXT
+  // ============================================================
 
-  const systemPrompt = `Kamu adalah CLARA AI Assistant — asisten manajemen dokumen arsip untuk organisasi Arranetwork Indonesia.
+  // List dokumen lengkap (max 50 untuk hemat token)
+  const docListContext = allDocs.slice(0, 50).map(d => {
+    const parties = partyMap[d.id]?.join(", ") || "-";
+    const uploader = profileMap[d.user_id] || "Unknown";
+    const retention = d.retention_date ? new Date(d.retention_date).toLocaleDateString("id-ID") : "-";
+    return `• "${d.title}" | ${CAT_LABELS[d.category] || d.category} | ${d.classification} | Pihak: ${parties} | Uploader: ${uploader} | Retensi: ${retention} | Summary: ${d.summary?.slice(0, 80) || "-"}`;
+  }).join("\n");
 
-IDENTITAS & PERAN:
-- Kamu membantu user menemukan, memahami, dan menganalisis dokumen di arsip CLARA
-- Selalu jawab dalam Bahasa Indonesia yang profesional dan ringkas
-- Jika menemukan dokumen relevan, sebutkan nama dokumennya secara spesifik
+  // Nomor surat context
+  const numberContext = (allNumbers || []).slice(0, 30).map((n: {
+    number: string; party_name: string; category: string; classification: string;
+    description: string; status: string; date: string; created_by_name: string; document_id: string | null;
+  }) =>
+    `• ${n.number} | ${CAT_LABELS[n.category] || n.category} | ${n.classification} | Pihak: ${n.party_name} | Perihal: ${n.description} | Status: ${n.status} | Tanggal: ${new Date(n.date).toLocaleDateString("id-ID")} | Oleh: ${n.created_by_name} | Dokumen: ${n.document_id ? "✅ Terlampir" : "❌ Belum ada"}`
+  ).join("\n");
+
+  const metaContext = `
+STATISTIK ARSIP CLARA (data real-time, akurat):
+- Total dokumen: ${totalDocs}
+- Total storage: ${totalSizeMB} MB
+- Dokumen scan: ${allDocs.filter(d => d.is_scanned).length}
+- Per klasifikasi:
+  * Public: ${byClassification["public"] || 0}
+  * Internal: ${byClassification["internal"] || 0}
+  * Confidential: ${byClassification["confidential"] || 0}
+  * Restricted: ${byClassification["restricted"] || 0}
+- Per kategori: ${Object.entries(byCategory).map(([k, v]) => `${CAT_LABELS[k] || k}: ${v}`).join(", ")}
+- Akan expired (30 hari): ${expiringDocs.length}${expiringDocs.length > 0 ? " — " + expiringDocs.map(d => d.title).join(", ") : ""}
+- Sudah expired: ${expiredDocs.length}
+- Total nomor surat: ${allNumbers?.length || 0}
+- Nomor surat Issued (belum ada dokumen): ${(allNumbers || []).filter((n: { status: string; document_id: string | null }) => n.status === "issued" && !n.document_id).length}
+
+DAFTAR LENGKAP DOKUMEN:
+${docListContext || "Tidak ada dokumen"}
+
+DAFTAR NOMOR SURAT:
+${numberContext || "Tidak ada nomor surat"}`;
+
+  // ============================================================
+  // 7. SYSTEM PROMPT
+  // ============================================================
+  const systemPrompt = `Kamu adalah CLARA AI Assistant — asisten manajemen dokumen arsip untuk Arranetwork.
+
+IDENTITAS:
+- Jawab selalu dalam Bahasa Indonesia yang profesional dan ringkas
+- Kamu memiliki akses penuh ke semua data arsip CLARA di bawah
 
 YANG BISA KAMU LAKUKAN ✅:
-- Menjawab pertanyaan tentang dokumen di arsip CLARA
-- Memberikan info metadata (kategori, klasifikasi, tanggal, retensi)
-- Statistik dan rangkuman arsip
-- Rekomendasi tindakan (expired, perlu review, dll)
-- Pencarian dan analisis isi dokumen
+- Menjawab pertanyaan tentang dokumen, nomor surat, party, statistik arsip
+- Memberikan info detail: siapa upload, kapan, pihak yang terlibat, klasifikasi, ringkasan
+- Query berdasarkan party, kategori, klasifikasi, status retensi
+- Analisis dan rekomendasi berdasarkan data arsip
 
 YANG TIDAK BISA ❌:
 - Menjawab di luar konteks arsip CLARA
 - Generate kode atau artefak
-- Mengakses internet atau data eksternal
-- Menampilkan isi verbatim dokumen Confidential/Restricted
+- Mengakses data di luar yang diberikan di bawah
 
-AKSES: Klasifikasi yang bisa diakses user ini: ${allowedClassifications.join(", ")}
+AKSES USER: Klasifikasi yang bisa diakses: ${allowedClassifications.join(", ")}
 
 ${metaContext}
 
-${documentContext ? `DOKUMEN RELEVAN DITEMUKAN (berdasarkan semantic search):\n${documentContext}` : "Tidak ada dokumen yang spesifik relevan berdasarkan semantic search."}
-${exactContext}
+${semanticContext ? "\n" + semanticContext : ""}
+${partyContext ? "\n" + partyContext : ""}
 
-INSTRUKSI PENTING:
-- Jika ada dokumen relevan di atas, sebutkan nama dokumennya secara eksplisit dalam jawaban
-- Jika tidak ada dokumen yang relevan, katakan dengan jujur dan sarankan user untuk mencoba kata kunci berbeda
-- Untuk pertanyaan tentang expired/retensi, gunakan data di atas
-- Jawaban singkat dan to the point, maksimal 3-4 paragraf`;
+INSTRUKSI KRITIS:
+1. Gunakan HANYA data di atas untuk menjawab — data ini akurat dan real-time
+2. Untuk pertanyaan statistik (berapa, jumlah, total) — jawab LANGSUNG dari angka di STATISTIK ARSIP
+3. Untuk pertanyaan tentang dokumen spesifik — cari di DAFTAR LENGKAP DOKUMEN
+4. Untuk pertanyaan tentang nomor surat — cari di DAFTAR NOMOR SURAT
+5. Jangan pernah bilang "tidak ada" jika data menunjukkan ada
+6. Sebutkan nama dokumen/nomor secara eksplisit jika relevan
+7. Jawaban maksimal 4 paragraf, langsung ke poin`;
 
   const messages = [
     { role: "system" as const, content: systemPrompt },
@@ -265,8 +299,8 @@ INSTRUKSI PENTING:
   const response = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     messages,
-    temperature: 0.2,
-    max_tokens: 600,
+    temperature: 0.1,
+    max_tokens: 800,
   });
 
   const answer = response.choices[0].message.content || "Maaf, tidak dapat memproses pertanyaan ini.";
@@ -274,13 +308,13 @@ INSTRUKSI PENTING:
   await supabase.from("search_history").insert({
     user_id: user.id,
     query: "[AI] " + question,
-    result_count: foundDocs.length,
+    result_count: allDocs.length,
   });
 
   return NextResponse.json({
     answer,
-    hasContext: !!documentContext || !!exactContext || !!partyContext,
-    docsFound: foundDocs.length,
+    hasContext: true,
+    docsFound: allDocs.length,
     usage: { used: used + 1, limit, remaining: isUnlimited ? 999999 : Math.max(0, limit - used - 1), isUnlimited },
   });
 }
