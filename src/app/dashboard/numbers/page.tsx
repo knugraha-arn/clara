@@ -107,15 +107,19 @@ export default function NumbersPage() {
 
   useEffect(() => { fetchNumbers(); }, [fetchNumbers]);
 
-  // Party autocomplete
+  // Party autocomplete — trigger dari 1 karakter
   useEffect(() => {
-    if (formPartyInput.length === 0) { setFormPartySuggestions([]); return; }
+    if (formPartyInput.length === 0) { 
+      setFormPartySuggestions([]); 
+      setShowPartySug(false);
+      return; 
+    }
+    setShowPartySug(true); // show dropdown immediately
     const t = setTimeout(async () => {
       const res = await fetch(`/api/parties?q=${encodeURIComponent(formPartyInput)}`);
       const data = await res.json();
       setFormPartySuggestions(data.parties || []);
-      setShowPartySug(true);
-    }, 200);
+    }, 150);
     return () => clearTimeout(t);
   }, [formPartyInput]);
 
@@ -264,8 +268,12 @@ export default function NumbersPage() {
               <div style={{ position: "relative" }}>
                 <label style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", display: "block", marginBottom: 4 }}>Pihak <span style={{ color: "#DC2626" }}>*</span></label>
                 <input ref={partyInputRef} type="text" value={formPartyInput}
-                  onChange={e => { setFormPartyInput(e.target.value); setFormPartyId(null); }}
-                  onFocus={() => formPartyInput && setShowPartySug(true)}
+                  onChange={e => { 
+                    setFormPartyInput(e.target.value); 
+                    setFormPartyId(null);
+                    if (e.target.value.length > 0) setShowPartySug(true);
+                  }}
+                  onFocus={() => { if (formPartyInput.length > 0) setShowPartySug(true); }}
                   placeholder="Ketik nama pihak..."
                   style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "8px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />
                 {showPartySug && formPartySuggestions.length > 0 && (

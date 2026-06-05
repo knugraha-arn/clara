@@ -71,19 +71,19 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
 
   const supabase = createClient();
 
-  // Fetch party suggestions
+  // Fetch party suggestions — trigger dari 1 karakter
   useEffect(() => {
     if (partyInput.length === 0) {
       setPartySuggestions([]);
       setShowSuggestions(false);
       return;
     }
+    setShowSuggestions(true); // show dropdown immediately
     const timeout = setTimeout(async () => {
       const res = await fetch(`/api/parties?q=${encodeURIComponent(partyInput)}`);
       const data = await res.json();
       setPartySuggestions(data.parties || []);
-      setShowSuggestions(true);
-    }, 200);
+    }, 150);
     return () => clearTimeout(timeout);
   }, [partyInput]);
 
