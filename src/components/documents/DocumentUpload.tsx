@@ -41,11 +41,11 @@ interface AiSuggestion {
   documentId: string;
 }
 
-interface DocumentUploadProps { onSuccess?: () => void; }
+interface DocumentUploadProps { onSuccess?: () => void; preSelectedNumberId?: string; }
 
 type Stage = "idle" | "uploading" | "analyzing" | "checking" | "confirm" | "saving" | "done" | "error";
 
-export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
+export default function DocumentUpload({ onSuccess, preSelectedNumberId }: DocumentUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
@@ -200,6 +200,10 @@ export default function DocumentUpload({ onSuccess }: DocumentUploadProps) {
         const numRes = await fetch("/api/document-numbers?status=issued");
         const numData = await numRes.json();
         setIssuedNumbers(numData.numbers || []);
+        // Pre-select nomor jika datang dari halaman Nomor Surat
+        if (preSelectedNumberId) {
+          setSelectedDocNumber(preSelectedNumberId);
+        }
       } catch { setIssuedNumbers([]); }
 
       setStage("confirm");

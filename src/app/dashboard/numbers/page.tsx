@@ -431,6 +431,41 @@ export default function NumbersPage() {
           </select>
         </div>
 
+        {/* Laporan nomor tanpa dokumen */}
+        {statusFilter === "issued" && (
+          <div style={{ backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: "#DC2626", margin: "0 0 8px" }}>
+              📋 Laporan Nomor Surat Tanpa Dokumen — {filteredNumbers.filter(n => !n.document_id).length} nomor
+            </p>
+            {filteredNumbers.filter(n => !n.document_id).length === 0 ? (
+              <p style={{ fontSize: 12, color: "#16A34A", margin: 0, fontWeight: 500 }}>✅ Semua nomor Issued sudah punya dokumen terlampir</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {filteredNumbers.filter(n => !n.document_id).map(n => {
+                  const daysSince = Math.floor((Date.now() - new Date(n.created_at).getTime()) / (1000 * 60 * 60 * 24));
+                  return (
+                    <div key={n.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "white", border: "1px solid #FECACA", borderRadius: 8, padding: "8px 12px" }}>
+                      <div>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "#1A1F2E" }}>{n.number}</span>
+                        <span style={{ fontSize: 11, color: "#6B7280", marginLeft: 10 }}>{n.description}</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 11, color: daysSince > 30 ? "#DC2626" : "#D97706", fontWeight: 600 }}>
+                          {daysSince > 30 ? "⚠️" : "⏰"} {daysSince} hari
+                        </span>
+                        <a href={`/dashboard?upload=1&number_id=${n.id}&number=${encodeURIComponent(n.number)}`}
+                          style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #BBF7D0", backgroundColor: "#F0FDF4", color: "#16A34A", fontSize: 11, fontWeight: 600, textDecoration: "none" }}>
+                          ⬆️ Upload
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* List */}
         <div style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 14, overflow: "hidden" }}>
           <div style={{ display: "grid", gridTemplateColumns: "190px 1fr 110px 110px 90px 100px 140px", gap: 10, padding: "10px 16px", borderBottom: "1px solid #F5F5F5", backgroundColor: "#FAFAFA" }}>
@@ -490,7 +525,8 @@ export default function NumbersPage() {
                       </button>
                     )}
                     {num.status === "issued" && (
-                      <a href="/dashboard" style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #BBF7D0", backgroundColor: "#F0FDF4", color: "#16A34A", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", textDecoration: "none" }}>
+                      <a href={`/dashboard?upload=1&number_id=${num.id}&number=${encodeURIComponent(num.number)}`}
+                        style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #BBF7D0", backgroundColor: "#F0FDF4", color: "#16A34A", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", textDecoration: "none" }}>
                         ⬆️ Upload
                       </a>
                     )}

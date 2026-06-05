@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import DocumentUpload from "@/components/documents/DocumentUpload";
 import DocumentSidePanel from "@/components/documents/DocumentSidePanel";
@@ -54,6 +55,8 @@ export default function DashboardPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [selectedDoc, setSelectedDoc] = useState<DocWithUploader | null>(null);
+  const [preSelectedNumber, setPreSelectedNumber] = useState<{ id: string; number: string } | null>(null);
+  const searchParams = useSearchParams();
 
   const fetchDocuments = useCallback(async (cat = "all") => {
     setLoading(true);
@@ -66,6 +69,17 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => { fetchDocuments("all"); }, [fetchDocuments]);
+
+  // Handle redirect dari halaman Nomor Surat
+  useEffect(() => {
+    const shouldUpload = searchParams.get("upload");
+    const numberId = searchParams.get("number_id");
+    const numberStr = searchParams.get("number");
+    if (shouldUpload === "1" && numberId && numberStr) {
+      setPreSelectedNumber({ id: numberId, number: decodeURIComponent(numberStr) });
+      setShowUpload(true);
+    }
+  }, [searchParams]);
 
   const handleCategoryClick = (cat: string) => { setActiveCategory(cat); setPage(1); fetchDocuments(cat); };
 
@@ -132,7 +146,20 @@ export default function DashboardPage() {
           {showUpload && canUpload && (
             <div style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 14, padding: 20, marginBottom: 20 }}>
               <p style={{ fontWeight: 600, color: "#1A1F2E", margin: "0 0 14px", fontSize: 14 }}>Upload Dokumen Baru</p>
-              <DocumentUpload onSuccess={() => { setShowUpload(false); fetchDocuments("all"); setActiveCategory("all"); setPage(1); }} />
+              {preSelectedNumber && (
+                <div style={{ backgroundColor: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 8, padding: "8px 14px", marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 14 }}>🔗</span>
+                  <p style={{ fontSize: 12, color: "#16A34A", margin: 0, fontWeight: 500 }}>
+                    Dokumen ini akan otomatis di-link ke nomor surat <strong>{preSelectedNumber.number}</strong>
+                  </p>
+                  <button onClick={() => setPreSelectedNumber(null)}
+                    style={{ marginLeft: "auto", background: "none", border: "none", color: "#9CA3AF", cursor: "pointer", fontSize: 16 }}>×</button>
+                </div>
+              )}
+              <DocumentUpload
+                onSuccess={() => { setShowUpload(false); setPreSelectedNumber(null); fetchDocuments("all"); setActiveCategory("all"); setPage(1); }}
+                preSelectedNumberId={preSelectedNumber?.id}
+              />
             </div>
           )}
 
