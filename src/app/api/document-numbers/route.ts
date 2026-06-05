@@ -68,42 +68,41 @@ export async function POST(request: NextRequest) {
 
   const isBackdated = docDate < today;
 
-  // Hitung sequence untuk tahun ini
+  // Hitung sequence — selalu ambil max sequence tahun ini (termasuk void/rejected)
+  // untuk menghindari duplicate key
   const { data: lastInYear } = await supabase
     .from("document_numbers")
     .select("sequence")
     .eq("year", year)
-    .not("status", "eq", "rejected")
-    .not("status", "eq", "void")
     .order("sequence", { ascending: false })
     .limit(1);
 
-  // Untuk backdated: hitung sequence yang seharusnya di bulan itu
+  const maxSequenceThisYear = lastInYear?.[0]?.sequence || 0;
+
+  // Untuk backdated: masukkan di urutan tanggal yang tepat
   let sequence: number;
   if (isBackdated) {
-    // Ambil semua nomor di tahun ini yang tanggalnya <= backdated date
+    // Ambil sequence terakhir sebelum tanggal backdated (exclude void/rejected)
     const { data: beforeDate } = await supabase
       .from("document_numbers")
       .select("sequence")
       .eq("year", year)
       .lte("date", date)
-      .not("status", "eq", "rejected")
-      .not("status", "eq", "void")
+      .not("status", "in", '("rejected","void")')
       .order("sequence", { ascending: false })
       .limit(1);
 
     const lastBefore = beforeDate?.[0]?.sequence || 0;
-    // Geser semua nomor setelah tanggal ini +1
+
+    // Geser semua nomor aktif setelah tanggal ini +1
     const { data: afterNums } = await supabase
       .from("document_numbers")
       .select("id, sequence, number, party_name, month, year")
       .eq("year", year)
       .gt("date", date)
-      .not("status", "eq", "rejected")
-      .not("status", "eq", "void")
+      .not("status", "in", '("rejected","void")')
       .order("sequence", { ascending: true });
 
-    // Update sequence nomor-nomor setelah tanggal backdated
     if (afterNums && afterNums.length > 0) {
       for (const num of afterNums) {
         const newSeq = num.sequence + 1;
@@ -114,9 +113,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    sequence = lastBefore + 1;
+    // Sequence baru = lastBefore + 1, tapi minimal maxSequenceThisYear + 1
+    sequence = Math.max(lastBefore + 1, maxSequenceThisYear + 1);
   } else {
-    sequence = (lastInYear?.[0]?.sequence || 0) + 1;
+    sequence = maxSequenceThisYear + 1;
   }
 
   const paddedSeq = String(sequence).padStart(3, "0");
