@@ -31,6 +31,7 @@ export interface Document {
   classification_override_reason: string | null;
   retention_date: string | null;
   retention_policy: RetentionPolicy;
+  valid_until: string | null;
   is_scanned: boolean;
   created_at: string;
   updated_at: string;
@@ -66,6 +67,8 @@ export interface MasterDocumentRegister {
   tanggal_upload: string;
   jumlah_halaman: number | null;
   ukuran_kb: number;
+  masa_berlaku: string | null;
+  status_masa_berlaku: "Aktif" | "Akan Berakhir" | "Berakhir" | null;
   retensi_sampai: string | null;
   status_retensi: "Active" | "Expiring Soon" | "Expired";
   tags: string[];

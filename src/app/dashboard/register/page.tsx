@@ -146,8 +146,8 @@ export default function RegisterPage() {
 
         {/* Table */}
         <div style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 14, overflow: "hidden" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "40px 1fr 110px 110px 130px 90px 80px 110px", gap: 10, padding: "10px 16px", borderBottom: "1px solid #F5F5F5", backgroundColor: "#FAFAFA", overflowX: "auto" }}>
-            {["No", "Dokumen", "Klasifikasi", "Kategori", "Diupload Oleh", "Tgl Upload", "Ukuran", "Retensi s/d"].map(h => (
+          <div style={{ display: "grid", gridTemplateColumns: "40px 1fr 110px 110px 130px 90px 80px 110px 110px", gap: 10, padding: "10px 16px", borderBottom: "1px solid #F5F5F5", backgroundColor: "#FAFAFA", overflowX: "auto" }}>
+            {["No", "Dokumen", "Klasifikasi", "Kategori", "Diupload Oleh", "Tgl Upload", "Ukuran", "Masa Berlaku", "Retensi s/d"].map(h => (
               <span key={h} style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</span>
             ))}
           </div>
@@ -165,7 +165,7 @@ export default function RegisterPage() {
               const clsCfg = CLS_CFG[doc.klasifikasi] || CLS_CFG["Internal"];
               return (
                 <div key={doc.id}
-                  style={{ display: "grid", gridTemplateColumns: "40px 1fr 110px 110px 130px 90px 80px 110px", gap: 10, padding: "12px 16px", borderBottom: i < documents.length - 1 ? "1px solid #F5F5F5" : "none", alignItems: "flex-start" }}
+                  style={{ display: "grid", gridTemplateColumns: "40px 1fr 110px 110px 130px 90px 80px 110px 110px", gap: 10, padding: "12px 16px", borderBottom: i < documents.length - 1 ? "1px solid #F5F5F5" : "none", alignItems: "flex-start" }}
                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#FAFBFF"}
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "white"}
                 >
@@ -185,6 +185,20 @@ export default function RegisterPage() {
                   </div>
                   <span style={{ fontSize: 11, color: "#6B7280", paddingTop: 2 }}>{formatDate(doc.tanggal_upload)}</span>
                   <span style={{ fontSize: 11, color: "#9CA3AF", paddingTop: 2 }}>{doc.ukuran_kb} KB</span>
+                  <div>
+                    {doc.masa_berlaku ? (
+                      <>
+                        <p style={{ fontSize: 11, color: "#374151", margin: "0 0 3px" }}>{formatDate(doc.masa_berlaku)}</p>
+                        <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 4,
+                          backgroundColor: doc.status_masa_berlaku === "Berakhir" ? "#FEF2F2" : doc.status_masa_berlaku === "Akan Berakhir" ? "#FFFBEB" : "#F0FDF4",
+                          color: doc.status_masa_berlaku === "Berakhir" ? "#DC2626" : doc.status_masa_berlaku === "Akan Berakhir" ? "#D97706" : "#16A34A" }}>
+                          {doc.status_masa_berlaku === "Berakhir" ? "⛔ Berakhir" : doc.status_masa_berlaku === "Akan Berakhir" ? "⚠️ Segera" : "✅ Aktif"}
+                        </span>
+                      </>
+                    ) : (
+                      <p style={{ fontSize: 11, color: "#9CA3AF", margin: 0 }}>—</p>
+                    )}
+                  </div>
                   <div>
                     <p style={{ fontSize: 11, color: "#374151", margin: "0 0 3px" }}>{formatDate(doc.retensi_sampai)}</p>
                     <span style={{ fontSize: 10, fontWeight: 600, backgroundColor: statusCfg.bg, color: statusCfg.color, padding: "1px 6px", borderRadius: 4 }}>

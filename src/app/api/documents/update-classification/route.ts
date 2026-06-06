@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { storagePath, classification, category, summary, overrideReason } = await request.json();
+  const { storagePath, classification, category, summary, validUntil, overrideReason } = await request.json();
 
   const { data: doc } = await supabase
     .from("documents")

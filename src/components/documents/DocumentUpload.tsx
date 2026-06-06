@@ -55,6 +55,7 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
   const [aiSuggestion, setAiSuggestion] = useState<AiSuggestion | null>(null);
   const [storagePath, setStoragePath] = useState("");
   const [selectedClassification, setSelectedClassification] = useState<DocumentClassification>("internal");
+  const [validUntil, setValidUntil] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [customCategory, setCustomCategory] = useState<string>("");
   const [editedSummary, setEditedSummary] = useState<string>("");
@@ -239,6 +240,7 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
             classification: selectedClassification,
             category: finalCategory,
             summary: isSummaryChanged ? editedSummary : undefined,
+            validUntil: validUntil || null,
             overrideReason,
           }),
         });
@@ -287,6 +289,7 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
     setSelectedCategory(""); setCustomCategory(""); setEditedSummary("");
     setParties([]); setPartyInput(""); setDuplicates([]);
     setSelectedDocNumber(""); setIssuedNumbers([]);
+    setValidUntil("");
   };
 
   const isOverride = aiSuggestion && selectedClassification !== aiSuggestion.classification;
@@ -548,6 +551,30 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
                 </div>
               </div>
             )}
+
+            {/* Masa Berlaku */}
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Masa Berlaku Dokumen
+                <span style={{ marginLeft: 6, fontSize: 10, color: "#9CA3AF", fontWeight: 400, textTransform: "none" }}>opsional</span>
+              </label>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input type="date" value={validUntil} onChange={e => setValidUntil(e.target.value)}
+                  min={new Date().toISOString().split("T")[0]}
+                  style={{ flex: 1, border: `1px solid ${validUntil ? "#16A34A" : "#E5E7EB"}`, borderRadius: 8, padding: "8px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", backgroundColor: validUntil ? "#F0FDF4" : "white" }} />
+                {validUntil && (
+                  <button onClick={() => setValidUntil("")}
+                    style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", backgroundColor: "white", cursor: "pointer", fontSize: 12, color: "#9CA3AF", fontFamily: "inherit" }}>
+                    ✕
+                  </button>
+                )}
+              </div>
+              {validUntil && (
+                <p style={{ fontSize: 11, color: "#16A34A", margin: "4px 0 0", fontWeight: 500 }}>
+                  ✓ Berlaku hingga: {new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(new Date(validUntil))}
+                </p>
+              )}
+            </div>
 
             {/* Link ke nomor surat */}
             <div>

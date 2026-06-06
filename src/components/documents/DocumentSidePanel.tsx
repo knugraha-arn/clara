@@ -181,6 +181,29 @@ export default function DocumentSidePanel({ document: doc, uploaderName, onClose
               </div>
             )}
 
+            {/* Masa Berlaku */}
+            {doc.valid_until && (() => {
+              const expDate = new Date(doc.valid_until);
+              const today = new Date();
+              today.setHours(0,0,0,0);
+              const diffDays = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+              const isExpired = diffDays < 0;
+              const isExpiringSoon = diffDays >= 0 && diffDays <= 30;
+              const color = isExpired ? "#DC2626" : isExpiringSoon ? "#D97706" : "#16A34A";
+              const bg = isExpired ? "#FEF2F2" : isExpiringSoon ? "#FFFBEB" : "#F0FDF4";
+              const border = isExpired ? "#FECACA" : isExpiringSoon ? "#FDE68A" : "#BBF7D0";
+              const label = isExpired ? "⛔ Sudah berakhir" : isExpiringSoon ? `⚠️ Berakhir dalam ${diffDays} hari` : `✅ Berlaku hingga`;
+              return (
+                <div style={{ marginBottom: 20, backgroundColor: bg, border: `1px solid ${border}`, borderRadius: 10, padding: "10px 14px" }}>
+                  <p style={{ fontSize: 11, fontWeight: 600, color, margin: "0 0 4px" }}>Masa Berlaku Dokumen</p>
+                  <p style={{ fontSize: 13, fontWeight: 700, color, margin: "0 0 2px" }}>
+                    {new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(expDate)}
+                  </p>
+                  <p style={{ fontSize: 11, color, margin: 0 }}>{label}</p>
+                </div>
+              );
+            })()}
+
             {/* Classification override info */}
             {doc.classification_overridden && (
               <div style={{ marginBottom: 20, backgroundColor: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, padding: "10px 14px" }}>
