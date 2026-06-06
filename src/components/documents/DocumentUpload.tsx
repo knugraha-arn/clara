@@ -289,7 +289,8 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
   };
 
   const isOverride = aiSuggestion && selectedClassification !== aiSuggestion.classification;
-  const canConfirm = parties.length > 0;
+  const isKontrak = (customCategory || selectedCategory) === "kontrak";
+  const canConfirm = parties.length > 0 && (!isKontrak || !!validUntil);
 
   return (
     <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
@@ -550,14 +551,17 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
 
             {/* Masa Berlaku */}
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: isKontrak ? "#DC2626" : "#6B7280", display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 Masa Berlaku Dokumen
-                <span style={{ marginLeft: 6, fontSize: 10, color: "#9CA3AF", fontWeight: 400, textTransform: "none" }}>opsional</span>
+                {isKontrak
+                  ? <span style={{ marginLeft: 6, fontSize: 10, color: "#DC2626", fontWeight: 600 }}>* wajib untuk Kontrak</span>
+                  : <span style={{ marginLeft: 6, fontSize: 10, color: "#9CA3AF", fontWeight: 400, textTransform: "none" }}>opsional</span>
+                }
               </label>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <input type="date" value={validUntil} onChange={e => setValidUntil(e.target.value)}
                   min={new Date().toISOString().split("T")[0]}
-                  style={{ flex: 1, border: `1px solid ${validUntil ? "#16A34A" : "#E5E7EB"}`, borderRadius: 8, padding: "8px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", backgroundColor: validUntil ? "#F0FDF4" : "white" }} />
+                  style={{ flex: 1, border: `1px solid ${validUntil ? "#16A34A" : isKontrak ? "#FECACA" : "#E5E7EB"}`, borderRadius: 8, padding: "8px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", backgroundColor: validUntil ? "#F0FDF4" : isKontrak ? "#FFF8F8" : "white" }} />
                 {validUntil && (
                   <button onClick={() => setValidUntil("")}
                     style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", backgroundColor: "white", cursor: "pointer", fontSize: 12, color: "#9CA3AF", fontFamily: "inherit" }}>
@@ -568,6 +572,11 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
               {validUntil && (
                 <p style={{ fontSize: 11, color: "#16A34A", margin: "4px 0 0", fontWeight: 500 }}>
                   ✓ Berlaku hingga: {new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(new Date(validUntil))}
+                </p>
+              )}
+              {!validUntil && isKontrak && (
+                <p style={{ fontSize: 11, color: "#DC2626", margin: "4px 0 0", fontWeight: 500 }}>
+                  ⚠️ Kontrak wajib memiliki masa berlaku
                 </p>
               )}
             </div>
