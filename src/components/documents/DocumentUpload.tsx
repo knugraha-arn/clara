@@ -226,25 +226,21 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
       setStage("saving"); setMessage("Menyimpan dokumen...");
 
       const finalCategory = customCategory.trim() || selectedCategory;
-      const isClassificationOverride = selectedClassification !== aiSuggestion.classification;
-      const isCategoryOverride = finalCategory !== aiSuggestion.category;
-      const isSummaryChanged = editedSummary !== aiSuggestion.summary;
 
-      // Update jika ada perubahan
-      if (isClassificationOverride || isCategoryOverride || isSummaryChanged) {
-        await fetch("/api/documents/update-classification", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            storagePath,
-            classification: selectedClassification,
-            category: finalCategory,
-            summary: isSummaryChanged ? editedSummary : undefined,
-            validUntil: validUntil || null,
-            overrideReason,
-          }),
-        });
-      }
+      // Selalu panggil update-classification untuk simpan semua perubahan user
+      // termasuk summary, valid_until, kategori, dan klasifikasi
+      await fetch("/api/documents/update-classification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storagePath,
+          classification: selectedClassification,
+          category: finalCategory,
+          summary: editedSummary,
+          validUntil: validUntil || null,
+          overrideReason,
+        }),
+      });
 
       // Simpan parties
       for (const party of parties) {

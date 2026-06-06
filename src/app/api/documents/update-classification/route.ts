@@ -19,10 +19,21 @@ export async function POST(request: NextRequest) {
 
   if (!doc) return NextResponse.json({ error: "Dokumen tidak ditemukan" }, { status: 404 });
 
-  const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  const updateData: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+
+  // Selalu update summary jika ada
+  if (summary !== undefined && summary !== null) {
+    updateData.summary = summary;
+  }
+
+  // Selalu update valid_until (bisa null untuk hapus)
+  updateData.valid_until = validUntil || null;
 
   // Update klasifikasi jika berubah
-  if (classification && classification !== doc.classification) {
+  const isClassificationChanged = classification && classification !== doc.classification;
+  if (isClassificationChanged) {
     updateData.classification = classification;
     updateData.classification_overridden = true;
     updateData.classification_override_reason = overrideReason || null;
@@ -32,17 +43,14 @@ export async function POST(request: NextRequest) {
   if (category && category !== doc.category) {
     updateData.category = category;
     updateData.category_overridden = true;
-    updateData.category_ai_suggestion = doc.category; // simpan AI suggestion lama
+    updateData.category_ai_suggestion = doc.category;
   }
 
-  if (Object.keys(updateData).length > 1) {
-    await supabase.from("documents").update(updateData).eq("id", doc.id);
-  }
+  await supabase.from("documents").update(updateData).eq("id", doc.id);
 
-  const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", user.id).single();
-
-  // Log audit jika ada perubahan
-  if (updateData.classification || updateData.category) {
+  // Log audit hanya jika ada perubahan klasifikasi atau kategori
+  if (isClassificationChanged || (category && category !== doc.category)) {
+    const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", user.id).single();
     await logEvent({
       supabase: adminSupabase,
       documentId: doc.id,
