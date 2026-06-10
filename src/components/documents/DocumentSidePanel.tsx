@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { Document } from "@/types";
 import { CATEGORY_LABELS } from "@/lib/utils";
+import { useRole } from "@/components/layout/DashboardShell";
 
 const CLASSIFICATION_CONFIG = {
   public:       { label: "Public",       color: "#16A34A", bg: "#F0FDF4" },
@@ -33,6 +34,8 @@ interface DocumentSidePanelProps {
 }
 
 export default function DocumentSidePanel({ document: doc, uploaderName, onClose }: DocumentSidePanelProps) {
+  const role = useRole();
+  const canDownload = role !== "viewer";
   const [parties, setParties] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
@@ -233,13 +236,15 @@ export default function DocumentSidePanel({ document: doc, uploaderName, onClose
         {doc && (
           <div style={{ padding: "16px 20px", borderTop: "1px solid #EFEFEF", display: "flex", gap: 8 }}>
             <button onClick={handlePreview}
-              style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "white", border: "1px solid #E5E7EB", borderRadius: 10, padding: "10px 0", fontSize: 13, fontWeight: 600, color: "#374151", cursor: "pointer", fontFamily: "inherit" }}>
+              style={{ flex: canDownload ? 1 : undefined, width: canDownload ? undefined : "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "white", border: "1px solid #E5E7EB", borderRadius: 10, padding: "10px 0", fontSize: 13, fontWeight: 600, color: "#374151", cursor: "pointer", fontFamily: "inherit" }}>
               👁️ Preview
             </button>
-            <button onClick={handleDownload}
-              style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#0344D8", border: "none", borderRadius: 10, padding: "10px 0", fontSize: 13, fontWeight: 600, color: "white", cursor: "pointer", fontFamily: "inherit" }}>
-              ⬇️ Download
-            </button>
+            {canDownload && (
+              <button onClick={handleDownload}
+                style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#0344D8", border: "none", borderRadius: 10, padding: "10px 0", fontSize: 13, fontWeight: 600, color: "white", cursor: "pointer", fontFamily: "inherit" }}>
+                ⬇️ Download
+              </button>
+            )}
           </div>
         )}
       </div>

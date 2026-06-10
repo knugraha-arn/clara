@@ -89,7 +89,7 @@ export async function PATCH(request: NextRequest) {
   if (!targetProfile) return NextResponse.json({ error: "User tidak ditemukan" }, { status: 404 });
 
   if (action === "change_role") {
-    const validRoles = ["auditor", "contributor", "admin", "super_admin"];
+    const validRoles = ["viewer", "auditor", "contributor", "admin", "super_admin"];
     if (!validRoles.includes(role)) return NextResponse.json({ error: "Role tidak valid" }, { status: 400 });
 
     await supabase.from("profiles").update({ role }).eq("id", userId);

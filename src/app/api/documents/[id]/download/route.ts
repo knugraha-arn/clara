@@ -12,6 +12,12 @@ export async function GET(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Viewer tidak bisa download
+  const { data: userProfile } = await supabase.from("profiles").select("role, full_name").eq("id", user.id).single();
+  if (userProfile?.role === "viewer") {
+    return NextResponse.json({ error: "Viewer tidak dapat mengunduh dokumen" }, { status: 403 });
+  }
+
   const { id } = await params;
 
   const { data: doc } = await supabase
@@ -23,18 +29,11 @@ export async function GET(
   if (!doc) return NextResponse.json({ error: "Dokumen tidak ditemukan" }, { status: 404 });
 
   const { data: fileData, error } = await adminSupabase.storage
-    .from("documents")
-    .download(doc.file_path);
+    .from("documents").download(doc.file_path);
 
   if (error || !fileData) {
     return NextResponse.json({ error: "Gagal mengunduh file" }, { status: 500 });
   }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name")
-    .eq("id", user.id)
-    .single();
 
   await logEvent({
     supabase: adminSupabase,
@@ -42,22 +41,19 @@ export async function GET(
     documentTitle: doc.title,
     userId: user.id,
     userEmail: user.email || "",
-    userName: profile?.full_name || undefined,
+    userName: userProfile?.full_name || undefined,
     eventType: "downloaded",
     metadata: { classification: doc.classification, file_name: doc.file_name },
     request,
   });
 
   const arrayBuffer = await fileData.arrayBuffer();
-
-  // RFC 5987 — nama file asli persis, spasi tetap spasi
-  const fileName = doc.file_name;
-  const encodedFileName = encodeURIComponent(fileName);
+  const encodedFileName = encodeURIComponent(doc.file_name);
 
   return new NextResponse(arrayBuffer, {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${fileName}"; filename*=UTF-8''${encodedFileName}`,
+      "Content-Disposition": `attachment; filename="${doc.file_name}"; filename*=UTF-8''${encodedFileName}`,
       "Content-Length": arrayBuffer.byteLength.toString(),
     },
   });

@@ -87,7 +87,7 @@ export interface UserProfile {
   email: string;
   full_name: string;
   avatar_url: string | null;
-  role: "super_admin" | "admin" | "contributor" | "auditor";
+  role: "super_admin" | "admin" | "contributor" | "auditor" | "viewer";
   created_at: string;
 }
 
