@@ -38,7 +38,7 @@ interface DocNumber {
   created_at: string; updated_at: string;
 }
 
-interface Party { id: string; name: string; doc_count: number; }
+interface Party { id: string; name: string; doc_count: number; abbreviation: string; }
 
 function formatDate(d: string) {
   return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" }).format(new Date(d));
@@ -85,6 +85,7 @@ export default function NumbersPage() {
   // Form state
   const [formPartyInput, setFormPartyInput] = useState("");
   const [formPartyId, setFormPartyId] = useState<string | null>(null);
+  const [formPartyAbbrev, setFormPartyAbbrev] = useState<string>("");
   const [formPartySuggestions, setFormPartySuggestions] = useState<Party[]>([]);
   const [showPartySug, setShowPartySug] = useState(false);
   const [formDate, setFormDate] = useState(new Date().toISOString().split("T")[0]);
@@ -121,14 +122,15 @@ export default function NumbersPage() {
     return () => clearTimeout(t);
   }, [formPartyInput]);
 
-  // Preview nomor
+  // Preview nomor — pakai abbreviation jika ada
   useEffect(() => {
     if (!formPartyInput.trim()) { setPreviewNumber(""); return; }
     const d = new Date(formDate);
     const month = d.getMonth() + 1;
     const year = d.getFullYear();
-    setPreviewNumber(`XXX/${formPartyInput.toUpperCase()}/${ROMAN[month]}/${year}`);
-  }, [formPartyInput, formDate]);
+    const partyCode = formPartyAbbrev || formPartyInput.toUpperCase().slice(0, 4);
+    setPreviewNumber(`XXX/${partyCode}/${ROMAN[month]}/${year}`);
+  }, [formPartyInput, formPartyAbbrev, formDate]);
 
   const handleAction = async (id: string, action: string, note?: string) => {
     setActionLoading(id + action);
@@ -316,23 +318,42 @@ export default function NumbersPage() {
                 {showPartySug && formPartySuggestions.length > 0 && (
                   <div style={{ position: "absolute", top: "100%", left: 0, right: 0, backgroundColor: "white", border: "1px solid #E5E7EB", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.1)", zIndex: 50, marginTop: 2 }}>
                     {formPartySuggestions.map(s => (
-                      <div key={s.id} onClick={() => { setFormPartyInput(s.name); setFormPartyId(s.id); setShowPartySug(false); }}
+                      <div key={s.id} onClick={() => { setFormPartyInput(s.name); setFormPartyId(s.id); setFormPartyAbbrev(s.abbreviation || ""); setShowPartySug(false); }}
                         style={{ padding: "8px 12px", cursor: "pointer", fontSize: 13, display: "flex", justifyContent: "space-between" }}
                         onMouseEnter={e => e.currentTarget.style.backgroundColor = "#F0F5FF"}
                         onMouseLeave={e => e.currentTarget.style.backgroundColor = "white"}>
                         <span>{s.name}</span>
-                        <span style={{ fontSize: 11, color: "#9CA3AF" }}>{s.doc_count} dok</span>
+                        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                          {s.abbreviation && <span style={{ fontSize: 10, fontWeight: 700, backgroundColor: "#EEF2FF", color: "#0344D8", padding: "1px 5px", borderRadius: 4 }}>{s.abbreviation}</span>}
+                          <span style={{ fontSize: 11, color: "#9CA3AF" }}>{s.doc_count} dok</span>
+                        </div>
                       </div>
                     ))}
                     {!formPartySuggestions.some(s => s.name.toLowerCase() === formPartyInput.toLowerCase()) && (
                       <div onClick={() => setShowPartySug(false)}
                         style={{ padding: "8px 12px", cursor: "pointer", fontSize: 12, color: "#16A34A", fontWeight: 600, borderTop: "1px solid #F3F4F6" }}>
-                        + Gunakan "{formPartyInput.toUpperCase()}" sebagai pihak baru
+                        + Pihak baru: "{formPartyInput.toUpperCase()}" — kode akan diminta
                       </div>
                     )}
                   </div>
                 )}
               </div>
+
+              {/* Kode party — muncul jika party baru (belum ada di DB) */}
+              {formPartyInput.trim() && !formPartyId && (
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "#DC2626", display: "block", marginBottom: 4 }}>
+                    Kode Pihak <span style={{ fontWeight: 400, color: "#9CA3AF" }}>(max 4 karakter, untuk nomor surat)</span>
+                  </label>
+                  <input type="text" value={formPartyAbbrev}
+                    onChange={e => setFormPartyAbbrev(e.target.value.toUpperCase().slice(0, 4))}
+                    maxLength={4} placeholder="misal: MAJU, INT, MDS..."
+                    style={{ width: "100%", border: `1px solid ${formPartyAbbrev ? "#16A34A" : "#FECACA"}`, borderRadius: 8, padding: "8px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", textTransform: "uppercase", letterSpacing: "2px", fontWeight: 700 }} />
+                  {formPartyAbbrev && (
+                    <p style={{ fontSize: 11, color: "#16A34A", margin: "4px 0 0" }}>Nomor akan jadi: XXX/{formPartyAbbrev}/...</p>
+                  )}
+                </div>
+              )}
 
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", display: "block", marginBottom: 4 }}>Klasifikasi</label>

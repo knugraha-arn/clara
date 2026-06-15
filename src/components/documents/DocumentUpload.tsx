@@ -28,7 +28,7 @@ interface DuplicateDoc {
   id: string; title: string; category: string; classification: string; created_at: string; similarity: number;
 }
 
-interface Party { id: string; name: string; }
+interface Party { id: string; name: string; abbreviation?: string; }
 
 interface AiSuggestion {
   classification: DocumentClassification;
@@ -69,6 +69,7 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
   // Party state
   const [parties, setParties] = useState<Party[]>([]);
   const [partyInput, setPartyInput] = useState("");
+  const [partyAbbrev, setPartyAbbrev] = useState("");
   const [partySuggestions, setPartySuggestions] = useState<{ id: string; name: string; doc_count: number }[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const partyInputRef = useRef<HTMLInputElement>(null);
@@ -247,7 +248,7 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
         await fetch(`/api/documents/${aiSuggestion.documentId}/parties`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: party.name }),
+          body: JSON.stringify({ name: party.name, abbreviation: party.abbreviation }),
         });
       }
 
