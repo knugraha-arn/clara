@@ -53,10 +53,35 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { partyId, partyName, date, category, classification, description } = await request.json();
+  const { partyId, partyName, partyAbbrev, partyFullName, date, category, classification, description } = await request.json();
 
   if (!partyName || !date || !category || !classification || !description) {
     return NextResponse.json({ error: "Semua field wajib diisi" }, { status: 400 });
+  }
+
+  // Simpan party baru ke tabel parties jika belum ada
+  let resolvedPartyId = partyId || null;
+  if (!partyId && partyFullName) {
+    const { data: existingParty } = await supabase
+      .from("parties").select("id, abbreviation").ilike("name", partyFullName.trim()).single();
+
+    if (existingParty) {
+      resolvedPartyId = existingParty.id;
+      // Update abbreviation jika belum ada
+      if (!existingParty.abbreviation && partyAbbrev) {
+        await supabase.from("parties").update({
+          abbreviation: partyAbbrev.trim().toUpperCase(),
+        }).eq("id", existingParty.id);
+      }
+    } else {
+      // Buat party baru
+      const { data: newParty } = await supabase.from("parties").insert({
+        name: partyFullName.trim(),
+        name_lower: partyFullName.trim().toLowerCase(),
+        abbreviation: partyAbbrev?.trim().toUpperCase() || null,
+      }).select().single();
+      if (newParty) resolvedPartyId = newParty.id;
+    }
   }
 
   const docDate = new Date(date);
@@ -135,7 +160,7 @@ export async function POST(request: NextRequest) {
       year,
       month,
       date,
-      party_id: partyId || null,
+      party_id: resolvedPartyId,
       party_name: partyName,
       category,
       classification,
