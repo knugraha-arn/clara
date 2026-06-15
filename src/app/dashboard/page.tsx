@@ -1,6 +1,38 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+
+const skeletonStyle = {
+  background: "linear-gradient(90deg, #F3F4F6 25%, #E5E7EB 50%, #F3F4F6 75%)",
+  backgroundSize: "200% 100%",
+  animation: "shimmer 1.4s infinite",
+  borderRadius: 8,
+};
+
+function SkeletonRow() {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 130px 90px 80px", gap: 10, padding: "14px 16px", borderBottom: "1px solid #F5F5F5", alignItems: "center" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ ...skeletonStyle, height: 14, width: "60%" }} />
+        <div style={{ ...skeletonStyle, height: 11, width: "40%" }} />
+      </div>
+      <div style={{ ...skeletonStyle, height: 20, width: 70, borderRadius: 4 }} />
+      <div style={{ ...skeletonStyle, height: 20, width: 80, borderRadius: 4 }} />
+      <div style={{ ...skeletonStyle, height: 13, width: 90 }} />
+      <div style={{ ...skeletonStyle, height: 13, width: 60 }} />
+      <div style={{ ...skeletonStyle, height: 13, width: 50 }} />
+    </div>
+  );
+}
+
+function SkeletonStatCard() {
+  return (
+    <div style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 14, padding: "16px 20px" }}>
+      <div style={{ ...skeletonStyle, height: 12, width: 80, marginBottom: 10 }} />
+      <div style={{ ...skeletonStyle, height: 28, width: 50 }} />
+    </div>
+  );
+}
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import DocumentUpload from "@/components/documents/DocumentUpload";
@@ -125,6 +157,7 @@ export default function DashboardPage() {
 
   return (
     <>
+      <style>{`@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }`}</style>
       <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
         {/* Top bar */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 28px", borderBottom: "1px solid #EFEFEF", backgroundColor: "white" }}>
