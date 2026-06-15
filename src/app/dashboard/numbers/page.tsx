@@ -148,7 +148,9 @@ export default function NumbersPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         partyId: formPartyId,
-        partyName: formPartyInput.trim().toUpperCase(),
+        partyName: formPartyAbbrev || formPartyInput.trim().toUpperCase().slice(0, 4),
+        partyAbbrev: formPartyAbbrev,
+        partyFullName: formPartyId ? null : formPartyInput.trim(),
         date: formDate,
         category: formCategory,
         classification: formClassification,
@@ -158,7 +160,7 @@ export default function NumbersPage() {
     const data = await res.json();
     if (res.ok) {
       setShowForm(false);
-      setFormPartyInput(""); setFormPartyId(null); setFormDescription(""); setPreviewNumber("");
+      setFormPartyInput(""); setFormPartyId(null); setFormPartyAbbrev(""); setFormDescription(""); setPreviewNumber("");
       setFormDate(new Date().toISOString().split("T")[0]);
       await fetchNumbers();
     } else {
