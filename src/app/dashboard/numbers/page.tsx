@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useCategories } from "@/lib/hooks/useCategories";
 import { useRole } from "@/components/layout/DashboardShell";
 
 const ROMAN = ["","I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"];
@@ -20,12 +21,6 @@ const CLS_CFG: Record<string, { label: string; color: string; bg: string }> = {
   internal:     { label: "Internal",     color: "#0344D8", bg: "#EEF2FF" },
   confidential: { label: "Confidential", color: "#D97706", bg: "#FFFBEB" },
   restricted:   { label: "Restricted",   color: "#DC2626", bg: "#FEF2F2" },
-};
-
-const CAT_LABELS: Record<string, string> = {
-  surat_masuk: "Surat Masuk", surat_keluar: "Surat Keluar", kontrak: "Kontrak",
-  memo: "Memo", laporan: "Laporan", kebijakan: "Kebijakan",
-  undangan: "Undangan", pengumuman: "Pengumuman", lainnya: "Lainnya",
 };
 
 interface DocNumber {
@@ -71,6 +66,7 @@ function ActionModal({ title, placeholder, onConfirm, onCancel, confirmLabel, co
 export default function NumbersPage() {
   const role = useRole();
   const canCreate = ["contributor", "admin", "super_admin"].includes(role);
+  const { categories, labelMap: CAT_LABELS } = useCategories();
   const isAdmin = ["admin", "super_admin"].includes(role);
 
   const [numbers, setNumbers] = useState<DocNumber[]>([]);
@@ -304,7 +300,7 @@ export default function NumbersPage() {
                 <label style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", display: "block", marginBottom: 4 }}>Jenis Dokumen</label>
                 <select value={formCategory} onChange={e => setFormCategory(e.target.value)}
                   style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "8px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}>
-                  {Object.entries(CAT_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  {categories.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                 </select>
               </div>
 

@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { generateStoragePath } from "@/lib/utils";
+import { useCategories } from "@/lib/hooks/useCategories";
 import type { DocumentClassification } from "@/types";
 
 const CLASSIFICATION_CONFIG: Record<DocumentClassification, { label: string; color: string; bg: string; border: string; desc: string }> = {
@@ -46,6 +47,7 @@ interface DocumentUploadProps { onSuccess?: () => void; preSelectedNumberId?: st
 type Stage = "idle" | "uploading" | "analyzing" | "checking" | "confirm" | "saving" | "done" | "error";
 
 export default function DocumentUpload({ onSuccess, preSelectedNumberId }: DocumentUploadProps) {
+  const { categories } = useCategories();
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
