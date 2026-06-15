@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { partyId, partyName, partyFullName, date, category, classification, description } = await request.json();
+  const { partyId, partyName, date, category, classification, description } = await request.json();
 
   if (!partyName || !date || !category || !classification || !description) {
     return NextResponse.json({ error: "Semua field wajib diisi" }, { status: 400 });
@@ -142,7 +142,6 @@ export async function POST(request: NextRequest) {
       description,
       status,
       is_backdated: isBackdated,
-      party_full_name: partyFullName || partyName,
       created_by: user.id,
       created_by_name: profile?.full_name || user.email,
     })
