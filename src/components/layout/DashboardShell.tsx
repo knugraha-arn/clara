@@ -3,7 +3,8 @@
 import { useState, useEffect, createContext, useContext } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 type Role = "viewer" | "auditor" | "contributor" | "admin" | "super_admin";
 
@@ -53,11 +54,18 @@ interface Profile {
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
 
   useEffect(() => {
     fetch("/api/profile").then(r => r.json()).then(d => { if (d.profile) setProfile(d.profile); });
   }, []);
+
+  const handleLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
 
   const role = profile?.role || "viewer";
   const initials = (profile?.full_name || profile?.email || "U")
@@ -95,7 +103,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             })}
           </nav>
 
-          {/* User info */}
+          {/* User info + Logout */}
           {profile && (
             <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -113,6 +121,12 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                   </span>
                 </div>
               </div>
+              <button onClick={handleLogout}
+                style={{ width: "100%", marginTop: 10, display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", backgroundColor: "transparent", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "rgba(255,255,255,0.4)", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.06)"; e.currentTarget.style.color = "rgba(255,255,255,0.7)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.2)"; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }}>
+                <span style={{ fontSize: 13 }}>↪</span> Keluar
+              </button>
             </div>
           )}
         </div>
