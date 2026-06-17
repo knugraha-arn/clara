@@ -28,6 +28,11 @@ const NAV: NavItem[] = [
   { href: "/dashboard/config",   icon: "⚙️", label: "Konfigurasi",   roles: ["super_admin"] },
 ];
 
+// Halaman yang butuh role tertentu — untuk proteksi akses URL langsung
+const ROUTE_ROLES: { path: string; roles: Role[] }[] = NAV
+  .filter(item => item.roles)
+  .map(item => ({ path: item.href, roles: item.roles! }));
+
 const ROLE_LABELS: Record<Role, string> = {
   viewer:      "Viewer",
   auditor:     "Auditor",
@@ -56,10 +61,24 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const pathname = usePathname();
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [roleReady, setRoleReady] = useState(false);
 
   useEffect(() => {
-    fetch("/api/profile").then(r => r.json()).then(d => { if (d.profile) setProfile(d.profile); });
+    fetch("/api/profile").then(r => r.json()).then(d => {
+      if (d.profile) setProfile(d.profile);
+      setRoleReady(true);
+    });
   }, []);
+
+  // Proteksi akses URL langsung — redirect ke dashboard kalau role tidak cukup
+  useEffect(() => {
+    if (!roleReady || !profile) return;
+    const role = profile.role;
+    const restricted = ROUTE_ROLES.find(r => pathname.startsWith(r.path));
+    if (restricted && !restricted.roles.includes(role)) {
+      router.replace("/dashboard");
+    }
+  }, [roleReady, profile, pathname, router]);
 
   const handleLogout = async () => {
     const supabase = createClient();
@@ -70,6 +89,10 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const role = profile?.role || "viewer";
   const initials = (profile?.full_name || profile?.email || "U")
     .split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
+
+  // Jangan render konten restricted sambil nunggu role dicek
+  const restricted = ROUTE_ROLES.find(r => pathname.startsWith(r.path));
+  const isRestricted = restricted && roleReady && !restricted.roles.includes(role);
 
   return (
     <RoleContext.Provider value={role}>
@@ -131,9 +154,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           )}
         </div>
 
-        {/* Main content */}
+        {/* Main content — kosong kalau sedang redirect */}
         <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-          {children}
+          {isRestricted ? null : children}
         </div>
       </div>
     </RoleContext.Provider>

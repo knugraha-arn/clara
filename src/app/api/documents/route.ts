@@ -1,10 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 
+// Klasifikasi yang boleh dilihat per role
+function allowedClassifications(role: string): string[] {
+  if (["admin", "super_admin"].includes(role)) return ["public", "internal", "confidential", "restricted"];
+  if (["contributor", "auditor"].includes(role))  return ["public", "internal", "confidential"];
+  return ["public", "internal"]; // viewer (default)
+}
+
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Ambil role user
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  const role = profile?.role || "viewer";
+  const classifications = allowedClassifications(role);
 
   const { searchParams } = new URL(request.url);
   const category = searchParams.get("category");
@@ -20,6 +36,8 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from("documents")
     .select("*", { count: "exact" })
+    .eq("status", "ready")                          // hanya dokumen siap
+    .in("classification", classifications)           // filter per role
     .order(safeSortKey, { ascending: sortDir })
     .range(offset, offset + pageSize - 1);
 
@@ -46,13 +64,14 @@ export async function GET(request: NextRequest) {
     uploader_name: profileMap[doc.user_id] || "Unknown",
   }));
 
-  // Active categories (hanya fetch sekali saat page=1 & tanpa filter kategori)
+  // Active categories — hanya dari dokumen yang user boleh lihat
   let activeCategories: string[] = [];
   if (page === 1 && (!category || category === "all")) {
     const { data: catData } = await supabase
       .from("documents")
       .select("category")
-      .eq("status", "ready");
+      .eq("status", "ready")
+      .in("classification", classifications);
     activeCategories = [...new Set((catData || []).map((d: { category: string }) => d.category))];
   }
 
@@ -72,6 +91,13 @@ export async function DELETE(request: NextRequest) {
   const adminSupabase = await createAdminClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Hanya contributor+ yang boleh delete
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const role = profile?.role || "viewer";
+  if (!["contributor", "admin", "super_admin"].includes(role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");

@@ -8,9 +8,10 @@ export const maxDuration = 60;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const DAILY_LIMITS: Record<string, number> = {
-  auditor: 20,
+  viewer:      10, // boleh akses tapi terbatas
+  auditor:     20,
   contributor: 30,
-  admin: 50,
+  admin:       50,
   super_admin: 999999,
 };
 
@@ -46,8 +47,8 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { data: profile } = await supabase.from("profiles").select("role, full_name").eq("id", user.id).single();
-  const userRole = profile?.role || "auditor";
-  const limit = DAILY_LIMITS[userRole] || 20;
+  const userRole = profile?.role || "viewer";
+  const limit = DAILY_LIMITS[userRole] ?? 0;
   const isUnlimited = userRole === "super_admin";
 
   // Cek usage

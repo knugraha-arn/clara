@@ -3,10 +3,21 @@ import { createClient } from "@/lib/supabase/server";
 import { embedSearchQuery } from "@/lib/openai";
 import type { SearchResult } from "@/types";
 
+function allowedClassifications(role: string): string[] {
+  if (["admin", "super_admin"].includes(role)) return ["public", "internal", "confidential", "restricted"];
+  if (["contributor", "auditor"].includes(role))  return ["public", "internal", "confidential"];
+  return ["public", "internal"]; // viewer
+}
+
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Ambil role user
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const role = profile?.role || "viewer";
+  const classifications = allowedClassifications(role);
 
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("q")?.trim();
@@ -15,11 +26,12 @@ export async function GET(request: NextRequest) {
   const results: (SearchResult & { uploader_name?: string })[] = [];
   const seenIds = new Set<string>();
 
-  // 1. EXACT MATCH
+  // 1. EXACT MATCH — filter classification sesuai role
   const { data: exactDocs } = await supabase
     .from("documents")
     .select("*")
     .eq("status", "ready")
+    .in("classification", classifications)
     .or(`title.ilike.%${query}%,summary.ilike.%${query}%,extracted_text_page1.ilike.%${query}%`)
     .limit(5);
 
@@ -46,7 +58,13 @@ export async function GET(request: NextRequest) {
           .filter(id => !seenIds.has(id as string));
 
         if (semanticDocIds.length > 0) {
-          const { data: semanticDocs } = await supabase.from("documents").select("*").in("id", semanticDocIds);
+          // Filter classification di sini juga — RPC tidak selalu respect RLS
+          const { data: semanticDocs } = await supabase
+            .from("documents")
+            .select("*")
+            .in("id", semanticDocIds)
+            .in("classification", classifications);
+
           if (semanticDocs) {
             for (const doc of semanticDocs) {
               const bestChunk = semanticResults.find((r: { document_id: string; similarity: number; chunk_text: string }) => r.document_id === doc.id);
