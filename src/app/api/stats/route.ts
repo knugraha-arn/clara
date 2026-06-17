@@ -62,9 +62,10 @@ export async function GET() {
     .eq("status", "ready");
 
   const uploaderMap: Record<string, { name: string; count: number }> = {};
-  (recentDocs || []).forEach((d: { user_id: string; profiles: { full_name: string; email: string } | null }) => {
+  (recentDocs || []).forEach((d: { user_id: string; profiles: { full_name: string; email: string }[] | { full_name: string; email: string } | null }) => {
     const key = d.user_id;
-    const name = d.profiles?.full_name || d.profiles?.email || "Unknown";
+    const profile = Array.isArray(d.profiles) ? d.profiles[0] : d.profiles;
+    const name = profile?.full_name || profile?.email || "Unknown";
     if (!uploaderMap[key]) uploaderMap[key] = { name, count: 0 };
     uploaderMap[key].count++;
   });
