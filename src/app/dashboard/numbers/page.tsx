@@ -3,6 +3,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useCategories } from "@/lib/hooks/useCategories";
 import { useRole } from "@/components/layout/DashboardShell";
+import { CLS_CFG, formatDateShort } from "@/lib/utils";
+import { useToast } from "@/components/ui/Toast";
+import { SkeletonPage } from "@/components/ui/Skeleton";
+
+const formatDate = formatDateShort;
 
 const ROMAN = ["","I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"];
 const MONTHS_ID = ["","Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
@@ -16,13 +21,6 @@ const STATUS_CFG: Record<string, { label: string; color: string; bg: string; ico
   void:     { label: "Void",     color: "#9CA3AF", bg: "#F9FAFB", icon: "⊘" },
 };
 
-const CLS_CFG: Record<string, { label: string; color: string; bg: string }> = {
-  public:       { label: "Public",       color: "#16A34A", bg: "#F0FDF4" },
-  internal:     { label: "Internal",     color: "#0344D8", bg: "#EEF2FF" },
-  confidential: { label: "Confidential", color: "#D97706", bg: "#FFFBEB" },
-  restricted:   { label: "Restricted",   color: "#DC2626", bg: "#FEF2F2" },
-};
-
 interface DocNumber {
   id: string; number: string; sequence: number; year: number; month: number; date: string;
   party_id: string | null; party_name: string; category: string; classification: string;
@@ -34,10 +32,6 @@ interface DocNumber {
 }
 
 interface Party { id: string; name: string; doc_count: number; abbreviation: string; }
-
-function formatDate(d: string) {
-  return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" }).format(new Date(d));
-}
 
 function ActionModal({ title, placeholder, onConfirm, onCancel, confirmLabel, confirmColor }:
   { title: string; placeholder: string; onConfirm: (note: string) => void; onCancel: () => void; confirmLabel: string; confirmColor: string }) {
@@ -68,6 +62,7 @@ export default function NumbersPage() {
   const canCreate = ["contributor", "admin", "super_admin"].includes(role);
   const { categories, labelMap: CAT_LABELS } = useCategories();
   const isAdmin = ["admin", "super_admin"].includes(role);
+  const { success: toastSuccess, error: toastError } = useToast();
 
   const [numbers, setNumbers] = useState<DocNumber[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
@@ -94,15 +89,21 @@ export default function NumbersPage() {
 
   const fetchNumbers = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (statusFilter !== "all") params.set("status", statusFilter);
-    if (yearFilter) params.set("year", yearFilter);
-    const res = await fetch(`/api/document-numbers?${params}`);
-    const data = await res.json();
-    setNumbers(data.numbers || []);
-    setPendingCount(data.pendingCount || 0);
-    setLoading(false);
-  }, [statusFilter, yearFilter]);
+    try {
+      const params = new URLSearchParams();
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      if (yearFilter) params.set("year", yearFilter);
+      const res = await fetch(`/api/document-numbers?${params}`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setNumbers(data.numbers || []);
+      setPendingCount(data.pendingCount || 0);
+    } catch {
+      toastError("Gagal memuat nomor surat.");
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter, yearFilter, toastError]);
 
   useEffect(() => { fetchNumbers(); }, [fetchNumbers]);
 
@@ -130,14 +131,22 @@ export default function NumbersPage() {
 
   const handleAction = async (id: string, action: string, note?: string) => {
     setActionLoading(id + action);
-    await fetch(`/api/document-numbers/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, note }),
-    });
-    setModal(null);
-    await fetchNumbers();
-    setActionLoading(null);
+    try {
+      const res = await fetch(`/api/document-numbers/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, note }),
+      });
+      if (!res.ok) throw new Error();
+      const actionLabels: Record<string, string> = { approve: "disetujui", reject: "ditolak", void: "dibatalkan" };
+      toastSuccess(`Nomor surat berhasil ${actionLabels[action] || action}.`);
+    } catch {
+      toastError("Gagal memproses aksi.");
+    } finally {
+      setModal(null);
+      await fetchNumbers();
+      setActionLoading(null);
+    }
   };
 
   const handleSubmit = async () => {
@@ -163,8 +172,9 @@ export default function NumbersPage() {
       setFormPartyInput(""); setFormPartyId(null); setFormPartyAbbrev(""); setFormDescription(""); setPreviewNumber("");
       setFormDate(new Date().toISOString().split("T")[0]);
       await fetchNumbers();
+      toastSuccess(data.status === "pending" ? "Nomor surat menunggu persetujuan admin." : `Nomor surat ${data.number?.number} berhasil dibuat.`);
     } else {
-      alert(data.error || "Gagal membuat nomor");
+      toastError(data.error || "Gagal membuat nomor surat.");
     }
     setSubmitting(false);
   };
@@ -494,7 +504,7 @@ export default function NumbersPage() {
           </div>
 
           {loading ? (
-            <div style={{ padding: "40px 0", textAlign: "center", color: "#9CA3AF" }}>Memuat...</div>
+            <SkeletonPage rows={7} cols="100px 1fr 110px 110px 100px 110px 80px" />
           ) : filteredNumbers.length === 0 ? (
             <div style={{ padding: "60px 0", textAlign: "center" }}>
               <p style={{ fontSize: 32, margin: "0 0 8px" }}>📝</p>

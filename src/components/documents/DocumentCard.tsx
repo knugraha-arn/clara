@@ -1,26 +1,7 @@
-import { CATEGORY_LABELS } from "@/lib/utils";
+import { CATEGORY_LABELS, CAT_COLORS, formatDateShort, formatSize } from "@/lib/utils";
 import type { Document } from "@/types";
 
-const CAT_COLORS: Record<string, { bg: string; color: string }> = {
-  surat_masuk:  { bg: "#EEF2FF", color: "#0344D8" },
-  surat_keluar: { bg: "#F0FDF4", color: "#16A34A" },
-  kontrak:      { bg: "#FFFBEB", color: "#D97706" },
-  memo:         { bg: "#F9FAFB", color: "#6B7280" },
-  laporan:      { bg: "#EFF6FF", color: "#2563EB" },
-  kebijakan:    { bg: "#FEF2F2", color: "#DC2626" },
-  undangan:     { bg: "#FDF4FF", color: "#9333EA" },
-  pengumuman:   { bg: "#FFF7ED", color: "#EA580C" },
-  lainnya:      { bg: "#F9FAFB", color: "#9CA3AF" },
-};
-
-function formatDate(d: string) {
-  return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" }).format(new Date(d));
-}
-function formatSize(b: number) {
-  if (b < 1024) return `${b} B`;
-  if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
-  return `${(b / (1024 * 1024)).toFixed(1)} MB`;
-}
+const formatDate = formatDateShort;
 
 interface DocumentCardProps {
   document: Document;

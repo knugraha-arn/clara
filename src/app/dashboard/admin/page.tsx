@@ -2,28 +2,12 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRole } from "@/components/layout/DashboardShell";
+import { CATEGORY_LABELS, CLS_CFG, formatDateShort, formatSize } from "@/lib/utils";
+import { useToast } from "@/components/ui/Toast";
+import { SkeletonPage } from "@/components/ui/Skeleton";
 import type { Document } from "@/types";
 
-const CAT_LABELS: Record<string, string> = {
-  surat_masuk: "Surat Masuk", surat_keluar: "Surat Keluar", kontrak: "Kontrak",
-  memo: "Memo", laporan: "Laporan", kebijakan: "Kebijakan",
-  undangan: "Undangan", pengumuman: "Pengumuman", lainnya: "Lainnya",
-};
-
-const CLS_CFG: Record<string, { color: string; bg: string }> = {
-  public:       { color: "#16A34A", bg: "#F0FDF4" },
-  internal:     { color: "#0344D8", bg: "#EEF2FF" },
-  confidential: { color: "#D97706", bg: "#FFFBEB" },
-  restricted:   { color: "#DC2626", bg: "#FEF2F2" },
-};
-
-function formatDate(d: string) {
-  return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" }).format(new Date(d));
-}
-function formatSize(b: number) {
-  if (b < 1024 * 1024) return (b / 1024).toFixed(0) + " KB";
-  return (b / (1024 * 1024)).toFixed(1) + " MB";
-}
+const formatDate = formatDateShort;
 
 interface DocWithUploader extends Document { uploader_name?: string; }
 
@@ -31,6 +15,7 @@ export default function AdminPage() {
   const role = useRole();
   const canAccess = role === "super_admin";
 
+  const { success: toastSuccess, error: toastError } = useToast();
   const [documents, setDocuments] = useState<DocWithUploader[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -41,11 +26,17 @@ export default function AdminPage() {
 
   const fetchDocuments = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/documents?limit=200");
-    const data = await res.json();
-    setDocuments(data.documents || []);
-    setLoading(false);
-  }, []);
+    try {
+      const res = await fetch("/api/documents?limit=200");
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setDocuments(data.documents || []);
+    } catch {
+      toastError("Gagal memuat daftar dokumen.");
+    } finally {
+      setLoading(false);
+    }
+  }, [toastError]);
 
   useEffect(() => { if (canAccess) fetchDocuments(); }, [canAccess, fetchDocuments]);
 
@@ -68,16 +59,20 @@ export default function AdminPage() {
   const handleDelete = async () => {
     if (selected.size === 0 || !deleteReason.trim()) return;
     setDeleting(true);
-
-    for (const id of selected) {
-      await fetch(`/api/documents?id=${id}`, { method: "DELETE" });
+    try {
+      await Promise.all(
+        [...selected].map(id => fetch(`/api/documents?id=${id}`, { method: "DELETE" }))
+      );
+      toastSuccess(`${selected.size} dokumen berhasil dihapus.`);
+    } catch {
+      toastError("Gagal menghapus sebagian dokumen.");
+    } finally {
+      setSelected(new Set());
+      setDeleteReason("");
+      setShowConfirm(false);
+      await fetchDocuments();
+      setDeleting(false);
     }
-
-    setSelected(new Set());
-    setDeleteReason("");
-    setShowConfirm(false);
-    await fetchDocuments();
-    setDeleting(false);
   };
 
   const filtered = documents.filter(d => {
@@ -182,7 +177,7 @@ export default function AdminPage() {
           </div>
 
           {loading ? (
-            <div style={{ padding: "40px 0", textAlign: "center", color: "#9CA3AF" }}>Memuat...</div>
+            <SkeletonPage rows={6} cols="40px 1fr 110px 110px 120px 90px 70px" />
           ) : filtered.length === 0 ? (
             <div style={{ padding: "40px 0", textAlign: "center", color: "#9CA3AF" }}>Tidak ada dokumen</div>
           ) : (
@@ -209,7 +204,7 @@ export default function AdminPage() {
                       {doc.classification}
                     </span>
                   </div>
-                  <span style={{ fontSize: 12, color: "#6B7280" }}>{CAT_LABELS[doc.category] || doc.category}</span>
+                  <span style={{ fontSize: 12, color: "#6B7280" }}>{CATEGORY_LABELS[doc.category] || doc.category}</span>
                   <span style={{ fontSize: 11, color: "#6B7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.uploader_name || "—"}</span>
                   <span style={{ fontSize: 11, color: "#6B7280" }}>{formatDate(doc.created_at)}</span>
                   <span style={{ fontSize: 11, color: "#9CA3AF" }}>{formatSize(doc.file_size)}</span>

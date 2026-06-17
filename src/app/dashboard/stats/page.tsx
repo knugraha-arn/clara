@@ -3,29 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRole } from "@/components/layout/DashboardShell";
 import Image from "next/image";
-
-const CATEGORY_LABELS: Record<string, string> = {
-  surat_masuk: "Surat Masuk", surat_keluar: "Surat Keluar", kontrak: "Kontrak",
-  memo: "Memo", laporan: "Laporan", kebijakan: "Kebijakan",
-  undangan: "Undangan", pengumuman: "Pengumuman", lainnya: "Lainnya",
-};
-
-const CLS_CFG: Record<string, { label: string; color: string; bg: string }> = {
-  public:       { label: "Public",       color: "#16A34A", bg: "#F0FDF4" },
-  internal:     { label: "Internal",     color: "#0344D8", bg: "#EEF2FF" },
-  confidential: { label: "Confidential", color: "#D97706", bg: "#FFFBEB" },
-  restricted:   { label: "Restricted",   color: "#DC2626", bg: "#FEF2F2" },
-};
-
-function formatSize(bytes: number) {
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + " KB";
-  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
-}
-
-function formatDateTime(d: string) {
-  return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(d));
-}
+import { CATEGORY_LABELS, CLS_CFG, formatSize, formatDateTime } from "@/lib/utils";
+import { useToast } from "@/components/ui/Toast";
 
 interface StatsData {
   overview: {
@@ -225,6 +204,7 @@ function BarChart({ data, maxVal, color }: { data: { label: string; value: numbe
 
 export default function StatsPage() {
   const role = useRole();
+  const { error: toastError } = useToast();
   const canView = ["super_admin", "admin"].includes(role);
   const [stats, setStats] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -232,8 +212,11 @@ export default function StatsPage() {
 
   useEffect(() => {
     if (!canView) return;
-    fetch("/api/stats").then(r => r.json()).then(d => { setStats(d); setLoading(false); });
-  }, [canView]);
+    fetch("/api/stats")
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(d => { setStats(d); setLoading(false); })
+      .catch(() => { toastError("Gagal memuat statistik."); setLoading(false); });
+  }, [canView, toastError]);
 
   const handleDownloadPDF = async () => {
     if (!stats) return;

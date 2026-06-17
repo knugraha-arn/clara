@@ -2,31 +2,10 @@
 
 import { useState, useCallback } from "react";
 import DocumentSidePanel from "@/components/documents/DocumentSidePanel";
-import { CATEGORY_LABELS } from "@/lib/utils";
+import { CATEGORY_LABELS, CLS_CFG, CAT_COLORS, formatDateShort } from "@/lib/utils";
 import type { SearchResult, Document } from "@/types";
 
-const CLS_CFG: Record<string, { label: string; color: string; bg: string }> = {
-  public:       { label: "Public",       color: "#16A34A", bg: "#F0FDF4" },
-  internal:     { label: "Internal",     color: "#0344D8", bg: "#EEF2FF" },
-  confidential: { label: "Confidential", color: "#D97706", bg: "#FFFBEB" },
-  restricted:   { label: "Restricted",   color: "#DC2626", bg: "#FEF2F2" },
-};
-
-const CAT_COLORS: Record<string, { bg: string; color: string }> = {
-  surat_masuk:  { bg: "#EEF2FF", color: "#0344D8" },
-  surat_keluar: { bg: "#F0FDF4", color: "#16A34A" },
-  kontrak:      { bg: "#FFFBEB", color: "#D97706" },
-  memo:         { bg: "#F9FAFB", color: "#6B7280" },
-  laporan:      { bg: "#EFF6FF", color: "#2563EB" },
-  kebijakan:    { bg: "#FEF2F2", color: "#DC2626" },
-  undangan:     { bg: "#FDF4FF", color: "#9333EA" },
-  pengumuman:   { bg: "#FFF7ED", color: "#EA580C" },
-  lainnya:      { bg: "#F9FAFB", color: "#9CA3AF" },
-};
-
-function formatDate(d: string) {
-  return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" }).format(new Date(d));
-}
+const formatDate = formatDateShort;
 
 interface SearchResultWithUploader extends SearchResult { uploader_name?: string; }
 

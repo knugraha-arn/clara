@@ -2,30 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { Document } from "@/types";
-import { CATEGORY_LABELS } from "@/lib/utils";
+import { CATEGORY_LABELS, CLS_CFG, formatDateTime, formatSize } from "@/lib/utils";
 import { useRole } from "@/components/layout/DashboardShell";
 
-const CLASSIFICATION_CONFIG = {
-  public:       { label: "Public",       color: "#16A34A", bg: "#F0FDF4" },
-  internal:     { label: "Internal",     color: "#0344D8", bg: "#EEF2FF" },
-  confidential: { label: "Confidential", color: "#D97706", bg: "#FFFBEB" },
-  restricted:   { label: "DC2626",       color: "#DC2626", bg: "#FEF2F2" },
-};
-
-const CLS_CFG: Record<string, { label: string; color: string; bg: string }> = {
-  public:       { label: "Public",       color: "#16A34A", bg: "#F0FDF4" },
-  internal:     { label: "Internal",     color: "#0344D8", bg: "#EEF2FF" },
-  confidential: { label: "Confidential", color: "#D97706", bg: "#FFFBEB" },
-  restricted:   { label: "Restricted",   color: "#DC2626", bg: "#FEF2F2" },
-};
-
-function formatDate(d: string) {
-  return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(d));
-}
-function formatSize(b: number) {
-  if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
-  return `${(b / (1024 * 1024)).toFixed(1)} MB`;
-}
+const formatDate = formatDateTime;
 
 interface DocumentSidePanelProps {
   document: Document | null;

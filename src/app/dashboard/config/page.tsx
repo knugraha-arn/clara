@@ -3,7 +3,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRole } from "@/components/layout/DashboardShell";
 import Image from "next/image";
+import { formatDateShort, formatSize } from "@/lib/utils";
+import { useToast } from "@/components/ui/Toast";
+import { SkeletonPage, SkeletonListRow } from "@/components/ui/Skeleton";
 import type { Document } from "@/types";
+
+function formatDate(d: string | null) {
+  if (!d) return "Belum pernah";
+  return formatDateShort(d);
+}
 
 const ROLE_CFG: Record<string, { label: string; color: string; bg: string }> = {
   viewer:      { label: "Viewer",      color: "#9CA3AF", bg: "#F9FAFB" },
@@ -22,19 +30,12 @@ interface UserData {
 
 interface DocWithUploader extends Document { uploader_name?: string; }
 
-function formatDate(d: string | null) {
-  if (!d) return "Belum pernah";
-  return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" }).format(new Date(d));
-}
-function formatSize(b: number) {
-  if (b < 1024 * 1024) return (b / 1024).toFixed(0) + " KB";
-  return (b / (1024 * 1024)).toFixed(1) + " MB";
-}
-
 export default function ConfigPage() {
   const role = useRole();
   const canAccess = role === "super_admin";
   const [activeTab, setActiveTab] = useState<"users" | "documents">("users");
+
+  const { success: toastSuccess, error: toastError } = useToast();
 
   // Users state
   const [users, setUsers] = useState<UserData[]>([]);
@@ -57,36 +58,58 @@ export default function ConfigPage() {
       const supabase = createClient();
       supabase.auth.getUser().then(({ data: { user } }) => { if (user) setCurrentUserId(user.id); });
     });
-    fetch("/api/users").then(r => r.json()).then(d => { setUsers(d.users || []); setUsersLoading(false); });
-    fetch("/api/documents?limit=200").then(r => r.json()).then(d => { setDocuments(d.documents || []); setDocsLoading(false); });
-  }, [canAccess]);
+    fetch("/api/users")
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(d => { setUsers(d.users || []); setUsersLoading(false); })
+      .catch(() => { toastError("Gagal memuat data pengguna."); setUsersLoading(false); });
+    fetch("/api/documents?limit=200")
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(d => { setDocuments(d.documents || []); setDocsLoading(false); })
+      .catch(() => { toastError("Gagal memuat daftar dokumen."); setDocsLoading(false); });
+  }, [canAccess, toastError]);
 
   const handleUserAction = async (userId: string, action: string, newRole?: string) => {
     setSaving(userId);
-    await fetch("/api/users", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, action, role: newRole }),
-    });
-    const res = await fetch("/api/users");
-    const data = await res.json();
-    setUsers(data.users || []);
-    setSaving(null);
+    try {
+      const res = await fetch("/api/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, action, role: newRole }),
+      });
+      if (!res.ok) throw new Error();
+      const actionLabels: Record<string, string> = {
+        suspend: "disuspend", unsuspend: "diaktifkan kembali", change_role: "diperbarui",
+      };
+      toastSuccess(`Pengguna berhasil ${actionLabels[action] || action}.`);
+      const refreshed = await fetch("/api/users");
+      const data = await refreshed.json();
+      setUsers(data.users || []);
+    } catch {
+      toastError("Gagal memproses aksi pengguna.");
+    } finally {
+      setSaving(null);
+    }
   };
 
   const handleDelete = async () => {
     if (selected.size === 0 || !deleteReason.trim()) return;
     setDeleting(true);
-    for (const id of selected) {
-      await fetch(`/api/documents?id=${id}`, { method: "DELETE" });
+    try {
+      await Promise.all(
+        [...selected].map(id => fetch(`/api/documents?id=${id}`, { method: "DELETE" }))
+      );
+      toastSuccess(`${selected.size} dokumen berhasil dihapus.`);
+    } catch {
+      toastError("Gagal menghapus sebagian dokumen.");
+    } finally {
+      setSelected(new Set());
+      setDeleteReason("");
+      setShowConfirm(false);
+      const res = await fetch("/api/documents?limit=200");
+      const data = await res.json();
+      setDocuments(data.documents || []);
+      setDeleting(false);
     }
-    setSelected(new Set());
-    setDeleteReason("");
-    setShowConfirm(false);
-    const res = await fetch("/api/documents?limit=200");
-    const data = await res.json();
-    setDocuments(data.documents || []);
-    setDeleting(false);
   };
 
   const filteredDocs = documents.filter(d => {
@@ -180,7 +203,9 @@ export default function ConfigPage() {
               </div>
 
               {usersLoading ? (
-                <div style={{ padding: "40px 0", textAlign: "center", color: "#9CA3AF" }}>Memuat...</div>
+                <div style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 14, overflow: "hidden" }}>
+                  {Array.from({ length: 4 }).map((_, i) => <SkeletonListRow key={i} />)}
+                </div>
               ) : (
                 users.map((u, i) => {
                   const roleCfg = ROLE_CFG[u.role] || ROLE_CFG.viewer;
@@ -281,7 +306,7 @@ export default function ConfigPage() {
               </div>
 
               {docsLoading ? (
-                <div style={{ padding: "40px 0", textAlign: "center", color: "#9CA3AF" }}>Memuat...</div>
+                <SkeletonPage rows={5} cols="40px 1fr 110px 110px 120px 90px 70px" />
               ) : filteredDocs.length === 0 ? (
                 <div style={{ padding: "40px 0", textAlign: "center", color: "#9CA3AF" }}>Tidak ada dokumen</div>
               ) : (

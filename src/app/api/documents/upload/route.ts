@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { analyzeDocumentPage1, generateEmbedding, chunkText } from "@/lib/gemini";
+import { analyzeDocumentPage1, generateEmbedding, chunkText } from "@/lib/openai";
 import { generateStoragePath } from "@/lib/utils";
 
 export const maxDuration = 300;

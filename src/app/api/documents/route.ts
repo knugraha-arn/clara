@@ -8,23 +8,29 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const category = searchParams.get("category");
-  const limit = parseInt(searchParams.get("limit") || "50");
-  const offset = parseInt(searchParams.get("offset") || "0");
+  const page     = Math.max(1, parseInt(searchParams.get("page")   || "1"));
+  const pageSize = Math.min(100, parseInt(searchParams.get("limit") || "10"));
+  const sortKey  = searchParams.get("sort")  || "created_at";
+  const sortDir  = searchParams.get("dir")   === "asc";
+  const offset   = (page - 1) * pageSize;
+
+  const allowedSortKeys = ["created_at", "title", "category", "file_size", "classification"];
+  const safeSortKey = allowedSortKeys.includes(sortKey) ? sortKey : "created_at";
 
   let query = supabase
     .from("documents")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .range(offset, offset + limit - 1);
+    .select("*", { count: "exact" })
+    .order(safeSortKey, { ascending: sortDir })
+    .range(offset, offset + pageSize - 1);
 
   if (category && category !== "all") {
     query = query.eq("category", category);
   }
 
-  const { data: documents, error } = await query;
+  const { data: documents, error, count } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Ambil nama uploader untuk semua dokumen
+  // Ambil nama uploader
   const userIds = [...new Set((documents || []).map((d: { user_id: string }) => d.user_id))];
   const { data: profiles } = await supabase
     .from("profiles")
@@ -40,16 +46,26 @@ export async function GET(request: NextRequest) {
     uploader_name: profileMap[doc.user_id] || "Unknown",
   }));
 
-  // Active categories
-  const { data: catData } = await supabase
-    .from("documents")
-    .select("category")
-    .eq("status", "ready");
+  // Active categories (hanya fetch sekali saat page=1 & tanpa filter kategori)
+  let activeCategories: string[] = [];
+  if (page === 1 && (!category || category === "all")) {
+    const { data: catData } = await supabase
+      .from("documents")
+      .select("category")
+      .eq("status", "ready");
+    activeCategories = [...new Set((catData || []).map((d: { category: string }) => d.category))];
+  }
 
-  const activeCategories = [...new Set((catData || []).map((d: { category: string }) => d.category))];
-
-  return NextResponse.json({ documents: documentsWithUploader, activeCategories });
+  return NextResponse.json({
+    documents: documentsWithUploader,
+    activeCategories,
+    total: count ?? 0,
+    page,
+    pageSize,
+    totalPages: Math.ceil((count ?? 0) / pageSize),
+  });
 }
+
 
 export async function DELETE(request: NextRequest) {
   const supabase = await createClient();

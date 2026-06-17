@@ -3,6 +3,15 @@
 import { useState, useEffect } from "react";
 import { useRole } from "@/components/layout/DashboardShell";
 import Image from "next/image";
+import { formatDateShort } from "@/lib/utils";
+import { useToast } from "@/components/ui/Toast";
+import { SkeletonListRow } from "@/components/ui/Skeleton";
+
+// formatDate di sini perlu handle null + teks berbeda, jadi buat wrapper tipis
+function formatDate(d: string | null) {
+  if (!d) return "Belum pernah";
+  return formatDateShort(d);
+}
 
 const ROLE_CFG: Record<string, { label: string; color: string; bg: string }> = {
   auditor:     { label: "Auditor",     color: "#6B7280", bg: "#F3F4F6" },
@@ -25,15 +34,11 @@ interface UserData {
   download_count: number;
 }
 
-function formatDate(d: string | null) {
-  if (!d) return "Belum pernah";
-  return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" }).format(new Date(d));
-}
-
 export default function UsersPage() {
   const role = useRole();
   const canView = role === "super_admin";
 
+  const { success: toastSuccess, error: toastError } = useToast();
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -41,29 +46,39 @@ export default function UsersPage() {
 
   useEffect(() => {
     if (!canView) return;
-    // Ambil current user ID
     import("@/lib/supabase/client").then(({ createClient }) => {
       const supabase = createClient();
       supabase.auth.getUser().then(({ data: { user } }) => {
         if (user) setCurrentUserId(user.id);
       });
     });
-    fetch("/api/users").then(r => r.json()).then(d => { setUsers(d.users || []); setLoading(false); });
-  }, [canView]);
+    fetch("/api/users")
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(d => { setUsers(d.users || []); setLoading(false); })
+      .catch(() => { toastError("Gagal memuat data pengguna."); setLoading(false); });
+  }, [canView, toastError]);
 
   const handleAction = async (userId: string, action: string, newRole?: string) => {
     setSaving(userId);
-    await fetch("/api/users", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, action, role: newRole }),
-    });
-
-    // Refresh list
-    const res = await fetch("/api/users");
-    const data = await res.json();
-    setUsers(data.users || []);
-    setSaving(null);
+    try {
+      const res = await fetch("/api/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, action, role: newRole }),
+      });
+      if (!res.ok) throw new Error();
+      const actionLabels: Record<string, string> = {
+        suspend: "disuspend", unsuspend: "diaktifkan kembali", change_role: "diperbarui",
+      };
+      toastSuccess(`Pengguna berhasil ${actionLabels[action] || action}.`);
+      const refreshed = await fetch("/api/users");
+      const data = await refreshed.json();
+      setUsers(data.users || []);
+    } catch {
+      toastError("Gagal memproses aksi pengguna.");
+    } finally {
+      setSaving(null);
+    }
   };
 
   if (!canView) {
@@ -117,7 +132,9 @@ export default function UsersPage() {
           </div>
 
           {loading ? (
-            <div style={{ padding: "40px 0", textAlign: "center", color: "#9CA3AF" }}>Memuat...</div>
+            <div style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 14, overflow: "hidden" }}>
+              {Array.from({ length: 5 }).map((_, i) => <SkeletonListRow key={i} />)}
+            </div>
           ) : (
             users.map((u, i) => {
               const roleCfg = ROLE_CFG[u.role] || ROLE_CFG.auditor;

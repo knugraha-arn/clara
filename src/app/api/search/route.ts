@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { embedSearchQuery } from "@/lib/gemini";
+import { embedSearchQuery } from "@/lib/openai";
 import type { SearchResult } from "@/types";
 
 export async function GET(request: NextRequest) {

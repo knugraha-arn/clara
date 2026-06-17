@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRole } from "@/components/layout/DashboardShell";
+import { formatDateTime } from "@/lib/utils";
+import { useToast } from "@/components/ui/Toast";
+import { SkeletonPage } from "@/components/ui/Skeleton";
 import type { DocumentLog, AuditEventType } from "@/types";
 
 const EVENT_CONFIG: Record<AuditEventType, { label: string; color: string; bg: string; icon: string }> = {
@@ -13,10 +16,6 @@ const EVENT_CONFIG: Record<AuditEventType, { label: string; color: string; bg: s
   classification_changed: { label: "Klasifikasi Diubah",color: "#D97706", bg: "#FFFBEB", icon: "🏷️" },
   role_changed:           { label: "Role Diubah",       color: "#0891B2", bg: "#ECFEFF", icon: "👤" },
 };
-
-function formatDateTime(d: string) {
-  return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(d));
-}
 
 async function generateAuditPDF(logs: DocumentLog[], eventFilter: string) {
   const { default: jsPDF } = await import("jspdf");
@@ -89,6 +88,7 @@ export default function AuditPage() {
   const role = useRole();
   const canView = ["super_admin", "admin", "auditor"].includes(role);
 
+  const { error: toastError } = useToast();
   const [logs, setLogs] = useState<DocumentLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [eventFilter, setEventFilter] = useState("all");
@@ -98,12 +98,18 @@ export default function AuditPage() {
   const fetchLogs = useCallback(async () => {
     if (!canView) return;
     setLoading(true);
-    const url = eventFilter === "all" ? "/api/audit" : `/api/audit?event_type=${eventFilter}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    setLogs(data.logs || []);
-    setLoading(false);
-  }, [canView, eventFilter]);
+    try {
+      const url = eventFilter === "all" ? "/api/audit" : `/api/audit?event_type=${eventFilter}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setLogs(data.logs || []);
+    } catch {
+      toastError("Gagal memuat audit log.");
+    } finally {
+      setLoading(false);
+    }
+  }, [canView, eventFilter, toastError]);
 
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
@@ -187,7 +193,7 @@ export default function AuditPage() {
           </div>
 
           {loading ? (
-            <div style={{ padding: "40px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Memuat log...</div>
+            <SkeletonPage rows={8} cols="140px 100px 1fr 140px 160px 160px" />
           ) : filteredLogs.length === 0 ? (
             <div style={{ padding: "40px 0", textAlign: "center" }}>
               <p style={{ fontSize: 24, margin: "0 0 8px" }}>📋</p>

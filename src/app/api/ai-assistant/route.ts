@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { embedSearchQuery } from "@/lib/gemini";
+import { embedSearchQuery } from "@/lib/openai";
 import OpenAI from "openai";
 
 export const maxDuration = 60;

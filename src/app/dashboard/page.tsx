@@ -1,72 +1,17 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-
-const skeletonStyle = {
-  background: "linear-gradient(90deg, #F3F4F6 25%, #E5E7EB 50%, #F3F4F6 75%)",
-  backgroundSize: "200% 100%",
-  animation: "shimmer 1.4s infinite",
-  borderRadius: 8,
-};
-
-function SkeletonRow() {
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 130px 90px 80px", gap: 10, padding: "14px 16px", borderBottom: "1px solid #F5F5F5", alignItems: "center" }}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        <div style={{ ...skeletonStyle, height: 14, width: "60%" }} />
-        <div style={{ ...skeletonStyle, height: 11, width: "40%" }} />
-      </div>
-      <div style={{ ...skeletonStyle, height: 20, width: 70, borderRadius: 4 }} />
-      <div style={{ ...skeletonStyle, height: 20, width: 80, borderRadius: 4 }} />
-      <div style={{ ...skeletonStyle, height: 13, width: 90 }} />
-      <div style={{ ...skeletonStyle, height: 13, width: 60 }} />
-      <div style={{ ...skeletonStyle, height: 13, width: 50 }} />
-    </div>
-  );
-}
-
-function SkeletonStatCard() {
-  return (
-    <div style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 14, padding: "16px 20px" }}>
-      <div style={{ ...skeletonStyle, height: 12, width: 80, marginBottom: 10 }} />
-      <div style={{ ...skeletonStyle, height: 28, width: 50 }} />
-    </div>
-  );
-}
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import DocumentUpload from "@/components/documents/DocumentUpload";
 import DocumentSidePanel from "@/components/documents/DocumentSidePanel";
 import { useRole } from "@/components/layout/DashboardShell";
-import { CATEGORY_LABELS } from "@/lib/utils";
+import { useToast } from "@/components/ui/Toast";
+import { SkeletonPage, SkeletonStatCard } from "@/components/ui/Skeleton";
+import { CATEGORY_LABELS, CLS_CFG, CAT_COLORS, formatDateShort, formatSize } from "@/lib/utils";
 import type { Document, DocumentCategory } from "@/types";
 
-const CAT_COLORS: Record<string, { bg: string; color: string }> = {
-  surat_masuk:  { bg: "#EEF2FF", color: "#0344D8" },
-  surat_keluar: { bg: "#F0FDF4", color: "#16A34A" },
-  kontrak:      { bg: "#FFFBEB", color: "#D97706" },
-  memo:         { bg: "#F9FAFB", color: "#6B7280" },
-  laporan:      { bg: "#EFF6FF", color: "#2563EB" },
-  kebijakan:    { bg: "#FEF2F2", color: "#DC2626" },
-  undangan:     { bg: "#FDF4FF", color: "#9333EA" },
-  pengumuman:   { bg: "#FFF7ED", color: "#EA580C" },
-  lainnya:      { bg: "#F9FAFB", color: "#9CA3AF" },
-};
-
-const CLS_CFG: Record<string, { label: string; color: string; bg: string }> = {
-  public:       { label: "Public",       color: "#16A34A", bg: "#F0FDF4" },
-  internal:     { label: "Internal",     color: "#0344D8", bg: "#EEF2FF" },
-  confidential: { label: "Confidential", color: "#D97706", bg: "#FFFBEB" },
-  restricted:   { label: "Restricted",   color: "#DC2626", bg: "#FEF2F2" },
-};
-
-function formatDate(d: string) {
-  return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" }).format(new Date(d));
-}
-function formatSize(b: number) {
-  if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
-  return `${(b / (1024 * 1024)).toFixed(1)} MB`;
-}
+const formatDate = formatDateShort;
 
 type SortKey = "created_at" | "title" | "category" | "file_size" | "classification";
 type SortDir = "asc" | "desc";
@@ -76,9 +21,12 @@ interface DocWithUploader extends Document { uploader_name?: string; }
 
 export default function DashboardPage() {
   const role = useRole();
+  const { error: toastError } = useToast();
   const canUpload = ["contributor", "admin", "super_admin"].includes(role);
-    const [documents, setDocuments] = useState<DocWithUploader[]>([]);
+  const [documents, setDocuments] = useState<DocWithUploader[]>([]);
   const [activeCategories, setActiveCategories] = useState<DocumentCategory[]>([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
   const [activeCategory, setActiveCategory] = useState("all");
@@ -90,17 +38,33 @@ export default function DashboardPage() {
   const [preSelectedNumber, setPreSelectedNumber] = useState<{ id: string; number: string } | null>(null);
   const searchParams = useSearchParams();
 
-  const fetchDocuments = useCallback(async (cat = "all") => {
+  const fetchDocuments = useCallback(async (
+    cat = "all", p = 1, size = 10, sort: SortKey = "created_at", dir: SortDir = "desc"
+  ) => {
     setLoading(true);
-    const url = cat === "all" ? "/api/documents" : `/api/documents?category=${cat}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    setDocuments(data.documents || []);
-    if (cat === "all") setActiveCategories(data.activeCategories || []);
-    setLoading(false);
-  }, []);
+    try {
+      const params = new URLSearchParams({
+        page: String(p),
+        limit: String(size),
+        sort,
+        dir,
+        ...(cat !== "all" ? { category: cat } : {}),
+      });
+      const res = await fetch(`/api/documents?${params}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setDocuments(data.documents || []);
+      setTotal(data.total ?? 0);
+      setTotalPages(data.totalPages ?? 1);
+      if (p === 1 && cat === "all") setActiveCategories(data.activeCategories || []);
+    } catch {
+      toastError("Gagal memuat dokumen. Coba refresh halaman.");
+    } finally {
+      setLoading(false);
+    }
+  }, [toastError]);
 
-  useEffect(() => { fetchDocuments("all"); }, [fetchDocuments]);
+  useEffect(() => { fetchDocuments("all", 1, pageSize, sortKey, sortDir); }, [fetchDocuments, pageSize, sortKey, sortDir]);
 
   // Handle redirect dari halaman Nomor Surat
   useEffect(() => {
@@ -113,33 +77,39 @@ export default function DashboardPage() {
     }
   }, [searchParams]);
 
-  const handleCategoryClick = (cat: string) => { setActiveCategory(cat); setPage(1); fetchDocuments(cat); };
-
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir("asc"); }
+  const handleCategoryClick = (cat: string) => {
+    setActiveCategory(cat);
     setPage(1);
+    fetchDocuments(cat, 1, pageSize, sortKey, sortDir);
   };
 
-  const sorted = [...documents].sort((a, b) => {
-    let va: string | number = a[sortKey as keyof Document] as string ?? "";
-    let vb: string | number = b[sortKey as keyof Document] as string ?? "";
-    if (sortKey === "file_size") { va = Number(va); vb = Number(vb); }
-    else { va = String(va).toLowerCase(); vb = String(vb).toLowerCase(); }
-    if (va < vb) return sortDir === "asc" ? -1 : 1;
-    if (va > vb) return sortDir === "asc" ? 1 : -1;
-    return 0;
-  });
+  const handleSort = (key: SortKey) => {
+    const newDir: SortDir = sortKey === key ? (sortDir === "asc" ? "desc" : "asc") : "asc";
+    setSortKey(key);
+    setSortDir(newDir);
+    setPage(1);
+    fetchDocuments(activeCategory, 1, pageSize, key, newDir);
+  };
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
-  const paginated = sorted.slice((page - 1) * pageSize, page * pageSize);
+  const handlePageChange = (p: number) => {
+    setPage(p);
+    fetchDocuments(activeCategory, p, pageSize, sortKey, sortDir);
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+    setPage(1);
+    fetchDocuments(activeCategory, 1, size, sortKey, sortDir);
+  };
+
+  const paginated = documents; // sudah dipaginasi dari server
   const today = new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(new Date());
 
   const statCards = [
-    { label: "Total Dokumen", value: documents.length, color: "#0344D8", cat: "all" },
+    { label: "Total Dokumen", value: total, color: "#0344D8", cat: "all" },
     ...activeCategories.map(cat => ({
       label: CATEGORY_LABELS[cat] || cat,
-      value: documents.filter(d => d.category === cat).length,
+      value: "—",
       color: CAT_COLORS[cat]?.color || "#9CA3AF",
       cat,
     })),
@@ -226,7 +196,7 @@ export default function DashboardPage() {
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
               <span style={{ fontSize: 12, color: "#9CA3AF" }}>Tampilkan</span>
               {PAGE_SIZE_OPTIONS.map(n => (
-                <button key={n} onClick={() => { setPageSize(n); setPage(1); }}
+                <button key={n} onClick={() => handlePageSizeChange(n)}
                   style={{ padding: "4px 10px", borderRadius: 6, fontSize: 12, fontWeight: 500, border: "1px solid", cursor: "pointer", fontFamily: "inherit", backgroundColor: pageSize === n ? "#1A1F2E" : "white", color: pageSize === n ? "white" : "#6B7280", borderColor: pageSize === n ? "#1A1F2E" : "#E5E7EB" }}>
                   {n}
                 </button>
@@ -247,7 +217,7 @@ export default function DashboardPage() {
             </div>
 
             {loading ? (
-              <div style={{ padding: "40px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Memuat...</div>
+              <SkeletonPage rows={pageSize > 10 ? 8 : 5} cols="1fr 110px 110px 120px 90px 70px" />
             ) : paginated.length === 0 ? (
               <div style={{ padding: "60px 0", textAlign: "center" }}>
                 <p style={{ fontSize: 32, margin: "0 0 8px" }}>📂</p>
@@ -319,12 +289,12 @@ export default function DashboardPage() {
           {totalPages > 1 && (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14 }}>
               <span style={{ fontSize: 12, color: "#9CA3AF" }}>
-                {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, sorted.length)} dari {sorted.length} dokumen
+                {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} dari {total} dokumen
               </span>
               <div style={{ display: "flex", gap: 4 }}>
-                <button onClick={() => setPage(1)} disabled={page === 1}
+                <button onClick={() => handlePageChange(1)} disabled={page === 1}
                   style={{ padding: "5px 10px", borderRadius: 7, border: "1px solid #E5E7EB", backgroundColor: "white", cursor: page === 1 ? "not-allowed" : "pointer", fontSize: 12, color: page === 1 ? "#D1D5DB" : "#374151", fontFamily: "inherit" }}>«</button>
-                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                <button onClick={() => handlePageChange(page - 1)} disabled={page === 1}
                   style={{ padding: "5px 10px", borderRadius: 7, border: "1px solid #E5E7EB", backgroundColor: "white", cursor: page === 1 ? "not-allowed" : "pointer", fontSize: 12, color: page === 1 ? "#D1D5DB" : "#374151", fontFamily: "inherit" }}>‹</button>
                 {Array.from({ length: totalPages }, (_, i) => i + 1)
                   .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
@@ -336,14 +306,14 @@ export default function DashboardPage() {
                   .map((p, i) => p === "..." ? (
                     <span key={`e-${i}`} style={{ padding: "5px 8px", fontSize: 12, color: "#9CA3AF" }}>…</span>
                   ) : (
-                    <button key={p} onClick={() => setPage(p as number)}
+                    <button key={p} onClick={() => handlePageChange(p as number)}
                       style={{ padding: "5px 10px", borderRadius: 7, border: "1px solid", fontSize: 12, fontFamily: "inherit", cursor: "pointer", backgroundColor: page === p ? "#0344D8" : "white", color: page === p ? "white" : "#374151", borderColor: page === p ? "#0344D8" : "#E5E7EB", fontWeight: page === p ? 600 : 400 }}>
                       {p}
                     </button>
                   ))}
-                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                <button onClick={() => handlePageChange(page + 1)} disabled={page === totalPages}
                   style={{ padding: "5px 10px", borderRadius: 7, border: "1px solid #E5E7EB", backgroundColor: "white", cursor: page === totalPages ? "not-allowed" : "pointer", fontSize: 12, color: page === totalPages ? "#D1D5DB" : "#374151", fontFamily: "inherit" }}>›</button>
-                <button onClick={() => setPage(totalPages)} disabled={page === totalPages}
+                <button onClick={() => handlePageChange(totalPages)} disabled={page === totalPages}
                   style={{ padding: "5px 10px", borderRadius: 7, border: "1px solid #E5E7EB", backgroundColor: "white", cursor: page === totalPages ? "not-allowed" : "pointer", fontSize: 12, color: page === totalPages ? "#D1D5DB" : "#374151", fontFamily: "inherit" }}>»</button>
               </div>
             </div>

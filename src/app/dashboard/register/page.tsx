@@ -2,7 +2,12 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRole } from "@/components/layout/DashboardShell";
+import { CATEGORY_LABELS, formatDateShort } from "@/lib/utils";
+import { useToast } from "@/components/ui/Toast";
+import { SkeletonPage } from "@/components/ui/Skeleton";
 import type { MasterDocumentRegister } from "@/types";
+
+const formatDate = formatDateShort;
 
 interface ValidityDoc {
   id: string;
@@ -22,23 +27,13 @@ const STATUS_CFG = {
   "Expired":       { color: "#DC2626", bg: "#FEF2F2", label: "Expired" },
 };
 
+// Key kapitalized karena data klasifikasi dari DB sudah dalam bentuk "Public", "Internal", dll
 const CLS_CFG: Record<string, { color: string; bg: string }> = {
   Public:       { color: "#16A34A", bg: "#F0FDF4" },
   Internal:     { color: "#0344D8", bg: "#EEF2FF" },
   Confidential: { color: "#D97706", bg: "#FFFBEB" },
   Restricted:   { color: "#DC2626", bg: "#FEF2F2" },
 };
-
-const CAT_LABELS: Record<string, string> = {
-  surat_masuk: "Surat Masuk", surat_keluar: "Surat Keluar", kontrak: "Kontrak",
-  memo: "Memo", laporan: "Laporan", kebijakan: "Kebijakan",
-  undangan: "Undangan", pengumuman: "Pengumuman", lainnya: "Lainnya",
-};
-
-function formatDate(d: string | null) {
-  if (!d) return "—";
-  return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" }).format(new Date(d));
-}
 
 function daysRemaining(d: string) {
   const diff = Math.ceil((new Date(d).getTime() - new Date().setHours(0,0,0,0)) / (1000 * 60 * 60 * 24));
@@ -49,6 +44,7 @@ export default function RegisterPage() {
   const role = useRole();
   const canExport = ["super_admin", "admin", "auditor"].includes(role);
   const isAdmin = ["super_admin", "admin"].includes(role);
+  const { error: toastError } = useToast();
 
   const [activeTab, setActiveTab] = useState<"arsip" | "masa_berlaku">("arsip");
 
@@ -70,23 +66,35 @@ export default function RegisterPage() {
   useEffect(() => {
     const fetch_ = async () => {
       setLoading(true);
-      const url = statusFilter === "all" ? "/api/register" : `/api/register?status=${statusFilter}`;
-      const res = await fetch(url);
-      const data = await res.json();
-      setDocuments(data.documents || []);
-      setLoading(false);
+      try {
+        const url = statusFilter === "all" ? "/api/register" : `/api/register?status=${statusFilter}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        setDocuments(data.documents || []);
+      } catch {
+        toastError("Gagal memuat data register.");
+      } finally {
+        setLoading(false);
+      }
     };
     fetch_();
-  }, [statusFilter]);
+  }, [statusFilter, toastError]);
 
   // Fetch masa berlaku
   const fetchValidity = useCallback(async () => {
     setValidityLoading(true);
-    const res = await fetch("/api/register/validity");
-    const json = await res.json();
-    setValidityDocs(json.data || []);
-    setValidityLoading(false);
-  }, []);
+    try {
+      const res = await fetch("/api/register/validity");
+      if (!res.ok) throw new Error();
+      const json = await res.json();
+      setValidityDocs(json.data || []);
+    } catch {
+      toastError("Gagal memuat data masa berlaku.");
+    } finally {
+      setValidityLoading(false);
+    }
+  }, [toastError]);
 
   useEffect(() => {
     if (activeTab === "masa_berlaku") fetchValidity();
@@ -126,7 +134,7 @@ export default function RegisterPage() {
       return [
         `"${d.title.replace(/"/g, '""')}"`,
         `"${d.parties.replace(/"/g, '""')}"`,
-        CAT_LABELS[d.category] || d.category,
+        CATEGORY_LABELS[d.category] || d.category,
         d.classification,
         formatDate(d.valid_until),
         days < 0 ? "Sudah berakhir" : `${days} hari`,
@@ -252,7 +260,7 @@ export default function RegisterPage() {
                 ))}
               </div>
               {loading ? (
-                <div style={{ padding: "40px 0", textAlign: "center", color: "#9CA3AF" }}>Memuat...</div>
+                <SkeletonPage rows={6} cols="40px 1fr 110px 110px 130px 90px 80px 110px" />
               ) : documents.length === 0 ? (
                 <div style={{ padding: "60px 0", textAlign: "center" }}>
                   <p style={{ fontSize: 32, margin: "0 0 8px" }}>📋</p>
@@ -360,7 +368,7 @@ export default function RegisterPage() {
               </div>
 
               {validityLoading ? (
-                <div style={{ padding: "40px 0", textAlign: "center", color: "#9CA3AF" }}>Memuat...</div>
+                <SkeletonPage rows={5} cols="1fr 110px 110px 100px 120px 80px" />
               ) : filteredValidity.length === 0 ? (
                 <div style={{ padding: "60px 0", textAlign: "center" }}>
                   <p style={{ fontSize: 32, margin: "0 0 8px" }}>⏰</p>
@@ -385,7 +393,7 @@ export default function RegisterPage() {
                         <p style={{ fontSize: 11, color: "#9CA3AF", margin: "2px 0 0" }}>{doc.uploader_name}</p>
                       </div>
                       <p style={{ fontSize: 12, color: "#374151", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.parties || "—"}</p>
-                      <span style={{ fontSize: 11, color: "#6B7280" }}>{CAT_LABELS[doc.category] || doc.category}</span>
+                      <span style={{ fontSize: 11, color: "#6B7280" }}>{CATEGORY_LABELS[doc.category] || doc.category}</span>
                       <span style={{ fontSize: 12, fontWeight: 600, color: statusColor }}>{formatDate(doc.valid_until)}</span>
                       <span style={{ fontSize: 12, fontWeight: 700, color: statusColor }}>
                         {isExpired ? `${Math.abs(days)} hari lalu` : `${days} hari`}
