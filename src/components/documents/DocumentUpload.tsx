@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { generateStoragePath } from "@/lib/utils";
+import { generateStoragePath, CATEGORY_LABELS } from "@/lib/utils";
 import { useCategories } from "@/lib/hooks/useCategories";
 import type { DocumentClassification } from "@/types";
 
@@ -13,17 +13,6 @@ const CLASSIFICATION_CONFIG: Record<DocumentClassification, { label: string; col
   restricted:   { label: "Restricted",   color: "#DC2626", bg: "#FEF2F2", border: "#FECACA", desc: "Sangat terbatas, board level" },
 };
 
-const CATEGORY_OPTIONS = [
-  { value: "surat_masuk",  label: "Surat Masuk" },
-  { value: "surat_keluar", label: "Surat Keluar" },
-  { value: "kontrak",      label: "Kontrak" },
-  { value: "memo",         label: "Memo" },
-  { value: "laporan",      label: "Laporan" },
-  { value: "kebijakan",    label: "Kebijakan" },
-  { value: "undangan",     label: "Undangan" },
-  { value: "pengumuman",   label: "Pengumuman" },
-  { value: "lainnya",      label: "Lainnya" },
-];
 
 interface DuplicateDoc {
   id: string; title: string; category: string; classification: string; created_at: string; similarity: number;
@@ -59,7 +48,6 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
   const [selectedClassification, setSelectedClassification] = useState<DocumentClassification>("internal");
   const [validUntil, setValidUntil] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string>("");
-  const [customCategory, setCustomCategory] = useState<string>("");
   const [editedSummary, setEditedSummary] = useState<string>("");
   const [overrideReason, setOverrideReason] = useState("");
   const [duplicates, setDuplicates] = useState<DuplicateDoc[]>([]);
@@ -228,7 +216,7 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
     try {
       setStage("saving"); setMessage("Menyimpan dokumen...");
 
-      const finalCategory = customCategory.trim() || selectedCategory;
+      const finalCategory = selectedCategory;
 
       // Selalu panggil update-classification untuk simpan semua perubahan user
       // termasuk summary, valid_until, kategori, dan klasifikasi
@@ -267,7 +255,7 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
       setTimeout(() => {
         setSelectedFile(null); setTitle(""); setStage("idle"); setProgress(0);
         setAiSuggestion(null); setStoragePath(""); setOverrideReason("");
-        setSelectedCategory(""); setCustomCategory(""); setEditedSummary("");
+        setSelectedCategory(""); setEditedSummary("");
         setParties([]); setPartyInput("");
         setDuplicates([]);
         setSelectedDocNumber("");
@@ -285,14 +273,14 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
     if (aiSuggestion?.documentId) await cancelAndDelete(aiSuggestion.documentId);
     setSelectedFile(null); setTitle(""); setStage("idle"); setProgress(0); setMessage("");
     setAiSuggestion(null); setStoragePath(""); setOverrideReason("");
-    setSelectedCategory(""); setCustomCategory(""); setEditedSummary("");
+    setSelectedCategory(""); setEditedSummary("");
     setParties([]); setPartyInput(""); setDuplicates([]);
     setSelectedDocNumber(""); setIssuedNumbers([]);
     setValidUntil("");
   };
 
   const isOverride = aiSuggestion && selectedClassification !== aiSuggestion.classification;
-  const isKontrak = (customCategory || selectedCategory) === "kontrak";
+  const isKontrak = selectedCategory === "kontrak";
   const canConfirm = parties.length > 0 && (!isKontrak || !!validUntil);
 
   return (
@@ -481,27 +469,21 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
             <div>
               <p style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 Kategori Dokumen
-                {(customCategory || selectedCategory !== aiSuggestion.category) && (
+                {selectedCategory !== aiSuggestion.category && (
                   <span style={{ marginLeft: 8, fontSize: 10, color: "#D97706" }}>⚠️ Diubah dari AI</span>
                 )}
               </p>
-              <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
-                {CATEGORY_OPTIONS.map(cat => {
-                  const isAI = cat.value === aiSuggestion.category;
-                  const isSelected = cat.value === selectedCategory && !customCategory;
-                  return (
-                    <button key={cat.value}
-                      onClick={() => { setSelectedCategory(cat.value); setCustomCategory(""); }}
-                      style={{ padding: "5px 12px", borderRadius: 7, fontSize: 12, fontWeight: 500, border: `1px solid ${isSelected ? "#0344D8" : "#E5E7EB"}`, backgroundColor: isSelected ? "#EEF2FF" : "white", color: isSelected ? "#0344D8" : "#6B7280", cursor: "pointer", fontFamily: "inherit" }}>
-                      {cat.label}{isAI && <span style={{ marginLeft: 3, fontSize: 9, color: "#16A34A", fontWeight: 700 }}>✦</span>}
-                    </button>
-                  );
-                })}
-              </div>
-              <input type="text" value={customCategory}
-                onChange={(e) => { setCustomCategory(e.target.value); if (e.target.value) setSelectedCategory(""); }}
-                placeholder="Atau ketik kategori lain... (Invoice, Proposal, MoM)"
-                style={{ width: "100%", border: `1px solid ${customCategory ? "#16A34A" : "#E5E7EB"}`, borderRadius: 8, padding: "7px 12px", fontSize: 12, fontFamily: "inherit", outline: "none", boxSizing: "border-box", backgroundColor: customCategory ? "#F0FDF4" : "white" }} />
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                style={{ width: "100%", border: `1px solid ${selectedCategory !== aiSuggestion.category ? "#FDE68A" : "#E5E7EB"}`, borderRadius: 10, padding: "9px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", backgroundColor: "white", cursor: "pointer" }}
+              >
+                {categories.filter(c => c.id !== "lainnya").map(cat => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.label}{cat.id === aiSuggestion.category ? " ✦ (saran AI)" : ""}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Klasifikasi */}

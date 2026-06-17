@@ -23,15 +23,22 @@ export function formatDate(dateString: string): string {
 }
 
 export const CATEGORY_LABELS: Record<DocumentCategory, string> = {
-  surat_masuk: "Surat Masuk",
-  surat_keluar: "Surat Keluar",
-  kontrak: "Kontrak",
-  memo: "Memo",
-  laporan: "Laporan",
-  kebijakan: "Kebijakan",
-  undangan: "Undangan",
-  pengumuman: "Pengumuman",
-  lainnya: "Lainnya",
+  surat_masuk:     "Surat Masuk",
+  surat_keluar:    "Surat Keluar",
+  kontrak:         "Kontrak",
+  nda:             "NDA",
+  memo:            "Memo",
+  prosedur:        "Prosedur",
+  kebijakan:       "Kebijakan",
+  instruksi_kerja: "Instruksi Kerja",
+  template:        "Template",
+  laporan:         "Laporan",
+  undangan:        "Undangan",
+  pengumuman:      "Pengumuman",
+  invoice:         "Invoice",
+  po:              "Purchase Order",
+  berita_acara:    "Berita Acara",
+  lainnya:         "Lainnya",
 };
 
 export const CATEGORY_COLORS: Record<DocumentCategory, string> = {
@@ -56,15 +63,22 @@ export const CLS_CFG: Record<string, { label: string; color: string; bg: string 
 
 // ─── Warna Kategori (inline style) ──────────────────────────────────────────
 export const CAT_COLORS: Record<string, { bg: string; color: string }> = {
-  surat_masuk:  { bg: "#EEF2FF", color: "#0344D8" },
-  surat_keluar: { bg: "#F0FDF4", color: "#16A34A" },
-  kontrak:      { bg: "#FFFBEB", color: "#D97706" },
-  memo:         { bg: "#F9FAFB", color: "#6B7280" },
-  laporan:      { bg: "#EFF6FF", color: "#2563EB" },
-  kebijakan:    { bg: "#FEF2F2", color: "#DC2626" },
-  undangan:     { bg: "#FDF4FF", color: "#9333EA" },
-  pengumuman:   { bg: "#FFF7ED", color: "#EA580C" },
-  lainnya:      { bg: "#F9FAFB", color: "#9CA3AF" },
+  surat_masuk:    { bg: "#EEF2FF", color: "#0344D8" },
+  surat_keluar:   { bg: "#F0FDF4", color: "#16A34A" },
+  kontrak:        { bg: "#FFFBEB", color: "#D97706" },
+  nda:            { bg: "#FEF2F2", color: "#DC2626" },
+  memo:           { bg: "#F9FAFB", color: "#6B7280" },
+  prosedur:       { bg: "#F0F9FF", color: "#0369A1" },
+  kebijakan:      { bg: "#FEF2F2", color: "#DC2626" },
+  instruksi_kerja:{ bg: "#F0FDF4", color: "#059669" },
+  template:       { bg: "#F5F3FF", color: "#7C3AED" },
+  laporan:        { bg: "#EFF6FF", color: "#2563EB" },
+  undangan:       { bg: "#FDF4FF", color: "#9333EA" },
+  pengumuman:     { bg: "#FFF7ED", color: "#EA580C" },
+  invoice:        { bg: "#FEF2F2", color: "#DC2626" },
+  po:             { bg: "#FFF7ED", color: "#C2410C" },
+  berita_acara:   { bg: "#ECFEFF", color: "#0891B2" },
+  lainnya:        { bg: "#F9FAFB", color: "#9CA3AF" },
 };
 
 // ─── Format Helpers ──────────────────────────────────────────────────────────

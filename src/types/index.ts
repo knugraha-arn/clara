@@ -1,6 +1,8 @@
 export type DocumentCategory =
-  | "surat_masuk" | "surat_keluar" | "kontrak" | "memo"
-  | "laporan" | "kebijakan" | "undangan" | "pengumuman" | "lainnya";
+  | "surat_masuk" | "surat_keluar" | "kontrak" | "nda" | "memo"
+  | "prosedur" | "kebijakan" | "instruksi_kerja" | "template"
+  | "laporan" | "undangan" | "pengumuman"
+  | "invoice" | "po" | "berita_acara" | "lainnya";
 
 export type DocumentStatus = "processing" | "ready" | "error";
 export type DocumentClassification = "public" | "internal" | "confidential" | "restricted";

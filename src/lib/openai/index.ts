@@ -19,7 +19,7 @@ ${extractedText.slice(0, 3000)}
 Berikan HANYA JSON berikut tanpa penjelasan lain:
 {
   "summary": "Ringkasan 2-3 kalimat bahasa Indonesia",
-  "category": "surat_masuk | surat_keluar | kontrak | memo | laporan | kebijakan | undangan | pengumuman | lainnya",
+  "category": "surat_masuk | surat_keluar | kontrak | nda | memo | prosedur | kebijakan | instruksi_kerja | template | laporan | undangan | pengumuman | invoice | po | berita_acara | lainnya",
   "category_confidence": 0.0,
   "classification": "public | internal | confidential | restricted",
   "classification_confidence": 0.0,
@@ -30,11 +30,31 @@ Berikan HANYA JSON berikut tanpa penjelasan lain:
   "recipient": "nama penerima atau null"
 }
 
+Panduan kategori:
+- surat_masuk: surat yang diterima dari pihak luar
+- surat_keluar: surat yang dikirim ke pihak luar
+- kontrak: perjanjian kerja sama, kontrak bisnis
+- nda: non-disclosure agreement, perjanjian kerahasiaan
+- memo: memo internal, nota dinas
+- prosedur: SOP, prosedur kerja, standard operating procedure
+- kebijakan: kebijakan perusahaan, policy
+- instruksi_kerja: work instruction, panduan teknis
+- template: template dokumen, format baku
+- laporan: laporan kerja, laporan keuangan, laporan proyek
+- undangan: undangan rapat, undangan acara
+- pengumuman: pengumuman internal/eksternal
+- invoice: tagihan, faktur, invoice pembayaran
+- po: purchase order, surat pesanan pembelian
+- berita_acara: berita acara serah terima, berita acara rapat
+- lainnya: tidak termasuk kategori di atas
+
 Panduan klasifikasi:
 - public: informasi umum, tidak sensitif, boleh diketahui publik
 - internal: untuk karyawan saja, memo, SOP, laporan operasional
 - confidential: kontrak, data keuangan, data pelanggan, perjanjian bisnis
-- restricted: NDA, data akuisisi, rahasia dagang, informasi board level`;
+- restricted: NDA, data akuisisi, rahasia dagang, informasi board level, invoice, purchase order, berita acara
+
+PENTING: Dokumen dengan kategori invoice, po, atau berita_acara HARUS diklasifikasikan sebagai restricted kecuali ada alasan kuat sebaliknya.`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -48,8 +68,9 @@ Panduan klasifikasi:
     const parsed = JSON.parse(text) as AiAnalysisResult;
 
     const validCategories: DocumentCategory[] = [
-      "surat_masuk", "surat_keluar", "kontrak", "memo",
-      "laporan", "kebijakan", "undangan", "pengumuman", "lainnya"
+      "surat_masuk", "surat_keluar", "kontrak", "nda", "memo",
+      "prosedur", "kebijakan", "instruksi_kerja", "template",
+      "laporan", "undangan", "pengumuman", "invoice", "po", "berita_acara", "lainnya"
     ];
     if (!validCategories.includes(parsed.category)) parsed.category = "lainnya";
 
