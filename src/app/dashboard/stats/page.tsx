@@ -313,13 +313,13 @@ export default function StatsPage() {
           {/* Activity */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
             {[
-              { title: "⬆️ Top Uploader", data: stats.activity.topUploaders, color: "#0344D8" },
-              { title: "⬇️ Top Download", data: stats.activity.topDownloaders, color: "#16A34A" },
-              { title: "🏆 Dokumen Terpopuler", data: stats.activity.topDocuments, color: "#9333EA" },
+              { title: "⬆️ Top Uploader",        data: stats.activity.topUploaders,  color: "#0344D8", subtitle: "Semua waktu" },
+              { title: "⬇️ Top Download",         data: stats.activity.topDownloaders, color: "#16A34A", subtitle: "30 hari terakhir" },
+              { title: "🏆 Dokumen Terpopuler",   data: stats.activity.topDocuments,   color: "#9333EA", subtitle: "30 hari terakhir" },
             ].map(section => (
               <div key={section.title} style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 14, padding: "20px" }}>
                 <p style={{ fontSize: 13, fontWeight: 700, color: "#1A1F2E", margin: "0 0 4px" }}>{section.title}</p>
-                <p style={{ fontSize: 11, color: "#9CA3AF", margin: "0 0 16px" }}>30 hari terakhir</p>
+                <p style={{ fontSize: 11, color: "#9CA3AF", margin: "0 0 16px" }}>{section.subtitle}</p>
                 {section.data.length === 0
                   ? <p style={{ fontSize: 12, color: "#9CA3AF", textAlign: "center", padding: "20px 0" }}>Belum ada aktivitas</p>
                   : <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

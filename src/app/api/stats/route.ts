@@ -55,11 +55,17 @@ export async function GET() {
 
   const allLogs = logs || [];
 
-  // Top uploaders
+  // Top uploaders — semua dokumen yang pernah diupload (tidak dibatasi 30 hari)
+  const { data: recentDocs } = await supabase
+    .from("documents")
+    .select("user_id, profiles(full_name, email)")
+    .eq("status", "ready");
+
   const uploaderMap: Record<string, { name: string; count: number }> = {};
-  allLogs.filter(l => l.event_type === "uploaded").forEach(l => {
-    const key = l.user_email;
-    if (!uploaderMap[key]) uploaderMap[key] = { name: l.user_name || l.user_email, count: 0 };
+  (recentDocs || []).forEach((d: { user_id: string; profiles: { full_name: string; email: string } | null }) => {
+    const key = d.user_id;
+    const name = d.profiles?.full_name || d.profiles?.email || "Unknown";
+    if (!uploaderMap[key]) uploaderMap[key] = { name, count: 0 };
     uploaderMap[key].count++;
   });
   const topUploaders = Object.values(uploaderMap).sort((a, b) => b.count - a.count).slice(0, 5);

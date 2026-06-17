@@ -18,15 +18,15 @@ SECURITY INVOKER
 STABLE
 AS $$
   SELECT
-    dc.document_id,
-    dc.chunk_text,
-    1 - (dc.embedding <=> query_embedding) AS similarity
-  FROM document_chunks dc
-  INNER JOIN documents d ON d.id = dc.document_id
+    de.document_id,
+    de.chunk_text,
+    1 - (de.embedding <=> query_embedding) AS similarity
+  FROM document_embeddings de
+  INNER JOIN documents d ON d.id = de.document_id
   WHERE
     d.status = 'ready'
-    AND 1 - (dc.embedding <=> query_embedding) > match_threshold
-  ORDER BY dc.embedding <=> query_embedding
+    AND 1 - (de.embedding <=> query_embedding) > match_threshold
+  ORDER BY de.embedding <=> query_embedding
   LIMIT match_count;
 $$;
 
