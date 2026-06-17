@@ -108,7 +108,7 @@ export default function DashboardPage() {
   const statCards = [
     { label: "Total Dokumen", value: total, color: "#0344D8", cat: "all" },
     ...activeCategories.map(cat => ({
-      label: CATEGORY_LABELS[cat] || cat,
+      label: CATEGORY_LABELS[cat as DocumentCategory] || cat,
       value: "—",
       color: CAT_COLORS[cat]?.color || "#9CA3AF",
       cat,
@@ -189,7 +189,7 @@ export default function DashboardPage() {
               {activeCategories.map(cat => (
                 <button key={cat} onClick={() => handleCategoryClick(cat)}
                   style={{ padding: "5px 12px", borderRadius: 7, fontSize: 12, fontWeight: 500, border: "1px solid", cursor: "pointer", fontFamily: "inherit", backgroundColor: activeCategory === cat ? CAT_COLORS[cat]?.color : "white", color: activeCategory === cat ? "white" : "#6B7280", borderColor: activeCategory === cat ? CAT_COLORS[cat]?.color : "#E5E7EB" }}>
-                  {CATEGORY_LABELS[cat] || cat}
+                  {CATEGORY_LABELS[cat as DocumentCategory] || cat}
                 </button>
               ))}
             </div>
@@ -269,7 +269,7 @@ export default function DashboardPage() {
                     {/* Kategori */}
                     <div style={{ paddingTop: 2 }}>
                       <span style={{ fontSize: 10, fontWeight: 600, backgroundColor: catStyle.bg, color: catStyle.color, padding: "2px 6px", borderRadius: 4 }}>
-                        {CATEGORY_LABELS[doc.category] || doc.category}
+                        {CATEGORY_LABELS[doc.category as DocumentCategory] || doc.category}
                       </span>
                     </div>
                     {/* Uploader */}

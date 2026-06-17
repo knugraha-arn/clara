@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRole } from "@/components/layout/DashboardShell";
 import Image from "next/image";
+import type { DocumentCategory } from "@/types";
 import { CATEGORY_LABELS, CLS_CFG, formatSize, formatDateTime } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
 
@@ -78,7 +79,7 @@ async function generatePDFReport(stats: StatsData) {
   autoTable(doc, {
     startY: afterOverview + 4,
     head: [["Kategori", "Jumlah"]],
-    body: Object.entries(stats.overview.byCategory).map(([k, v]) => [CATEGORY_LABELS[k] || k, String(v)]),
+    body: Object.entries(stats.overview.byCategory).map(([k, v]) => [CATEGORY_LABELS[k as DocumentCategory] || k, String(v)]),
     theme: "grid",
     headStyles: { fillColor: [3, 68, 216], textColor: 255, fontStyle: "bold" },
     styles: { fontSize: 9 },
@@ -282,7 +283,7 @@ export default function StatsPage() {
               <p style={{ fontSize: 13, fontWeight: 700, color: "#1A1F2E", margin: "0 0 16px" }}>Dokumen per Kategori</p>
               {Object.keys(stats.overview.byCategory).length === 0
                 ? <p style={{ fontSize: 12, color: "#9CA3AF", textAlign: "center", padding: "20px 0" }}>Belum ada data</p>
-                : <BarChart data={Object.entries(stats.overview.byCategory).map(([k, v]) => ({ label: CATEGORY_LABELS[k] || k, value: v }))} maxVal={Math.max(...Object.values(stats.overview.byCategory))} color="#0344D8" />}
+                : <BarChart data={Object.entries(stats.overview.byCategory).map(([k, v]) => ({ label: CATEGORY_LABELS[k as DocumentCategory] || k, value: v }))} maxVal={Math.max(...Object.values(stats.overview.byCategory))} color="#0344D8" />}
             </div>
             <div style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 14, padding: "20px" }}>
               <p style={{ fontSize: 13, fontWeight: 700, color: "#1A1F2E", margin: "0 0 16px" }}>Dokumen per Klasifikasi</p>

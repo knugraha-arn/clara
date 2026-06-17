@@ -5,7 +5,7 @@ import { useRole } from "@/components/layout/DashboardShell";
 import { CATEGORY_LABELS, CLS_CFG, formatDateShort, formatSize } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
 import { SkeletonPage } from "@/components/ui/Skeleton";
-import type { Document } from "@/types";
+import type { Document, DocumentCategory } from "@/types";
 
 const formatDate = formatDateShort;
 
@@ -204,7 +204,7 @@ export default function AdminPage() {
                       {doc.classification}
                     </span>
                   </div>
-                  <span style={{ fontSize: 12, color: "#6B7280" }}>{CATEGORY_LABELS[doc.category] || doc.category}</span>
+                  <span style={{ fontSize: 12, color: "#6B7280" }}>{CATEGORY_LABELS[doc.category as DocumentCategory] || doc.category}</span>
                   <span style={{ fontSize: 11, color: "#6B7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.uploader_name || "—"}</span>
                   <span style={{ fontSize: 11, color: "#6B7280" }}>{formatDate(doc.created_at)}</span>
                   <span style={{ fontSize: 11, color: "#9CA3AF" }}>{formatSize(doc.file_size)}</span>

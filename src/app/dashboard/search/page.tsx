@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import DocumentSidePanel from "@/components/documents/DocumentSidePanel";
 import { CATEGORY_LABELS, CLS_CFG, CAT_COLORS, formatDateShort } from "@/lib/utils";
-import type { SearchResult, Document } from "@/types";
+import type { SearchResult, Document, DocumentCategory } from "@/types";
 
 const formatDate = formatDateShort;
 
@@ -104,7 +104,7 @@ export default function SearchPage() {
                           {result.snippet && <p style={{ fontSize: 11, color: "#9CA3AF", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontStyle: "italic" }}>"{result.snippet.slice(0, 100)}..."</p>}
                         </div>
                         <div><span style={{ fontSize: 10, fontWeight: 600, backgroundColor: clsStyle.bg, color: clsStyle.color, padding: "2px 6px", borderRadius: 4 }}>{clsStyle.label}</span></div>
-                        <div><span style={{ fontSize: 10, fontWeight: 600, backgroundColor: catStyle.bg, color: catStyle.color, padding: "2px 6px", borderRadius: 4 }}>{CATEGORY_LABELS[doc.category] || doc.category}</span></div>
+                        <div><span style={{ fontSize: 10, fontWeight: 600, backgroundColor: catStyle.bg, color: catStyle.color, padding: "2px 6px", borderRadius: 4 }}>{CATEGORY_LABELS[doc.category as DocumentCategory] || doc.category}</span></div>
                         <span style={{ fontSize: 11, color: "#6B7280" }}>{result.uploader_name || "—"}</span>
                         <span style={{ fontSize: 11, color: "#6B7280" }}>{formatDate(doc.created_at)}</span>
                       </div>

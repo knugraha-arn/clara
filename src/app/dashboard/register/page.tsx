@@ -5,7 +5,7 @@ import { useRole } from "@/components/layout/DashboardShell";
 import { CATEGORY_LABELS, formatDateShort } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
 import { SkeletonPage } from "@/components/ui/Skeleton";
-import type { MasterDocumentRegister } from "@/types";
+import type { MasterDocumentRegister, DocumentCategory } from "@/types";
 
 const formatDate = formatDateShort;
 
@@ -134,7 +134,7 @@ export default function RegisterPage() {
       return [
         `"${d.title.replace(/"/g, '""')}"`,
         `"${d.parties.replace(/"/g, '""')}"`,
-        CATEGORY_LABELS[d.category] || d.category,
+        CATEGORY_LABELS[d.category as DocumentCategory] || d.category,
         d.classification,
         formatDate(d.valid_until),
         days < 0 ? "Sudah berakhir" : `${days} hari`,
@@ -393,7 +393,7 @@ export default function RegisterPage() {
                         <p style={{ fontSize: 11, color: "#9CA3AF", margin: "2px 0 0" }}>{doc.uploader_name}</p>
                       </div>
                       <p style={{ fontSize: 12, color: "#374151", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.parties || "—"}</p>
-                      <span style={{ fontSize: 11, color: "#6B7280" }}>{CATEGORY_LABELS[doc.category] || doc.category}</span>
+                      <span style={{ fontSize: 11, color: "#6B7280" }}>{CATEGORY_LABELS[doc.category as DocumentCategory] || doc.category}</span>
                       <span style={{ fontSize: 12, fontWeight: 600, color: statusColor }}>{formatDate(doc.valid_until)}</span>
                       <span style={{ fontSize: 12, fontWeight: 700, color: statusColor }}>
                         {isExpired ? `${Math.abs(days)} hari lalu` : `${days} hari`}
