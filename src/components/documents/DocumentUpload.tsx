@@ -52,7 +52,8 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
   const [overrideReason, setOverrideReason] = useState("");
   const [duplicates, setDuplicates] = useState<DuplicateDoc[]>([]);
 
-  // Nomor surat state
+  const [showWarning, setShowWarning] = useState(false);
+  const [pendingNavCleanup, setPendingNavCleanup] = useState(false);
   const [issuedNumbers, setIssuedNumbers] = useState<{ id: string; number: string; description: string }[]>([]);
   const [selectedDocNumber, setSelectedDocNumber] = useState<string>("");
 
@@ -66,6 +67,26 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
   const supabase = createClient();
+
+  // Deteksi apakah user sudah mengisi sesuatu di form konfirmasi
+  const hasUnsavedChanges = stage === "confirm" && (
+    parties.length > 0 ||
+    (aiSuggestion && editedSummary !== aiSuggestion.summary) ||
+    (aiSuggestion && selectedCategory !== aiSuggestion.category) ||
+    (aiSuggestion && selectedClassification !== aiSuggestion.classification) ||
+    !!validUntil
+  );
+
+  // Cleanup saat komponen unmount (pindah halaman)
+  useEffect(() => {
+    return () => {
+      if (stage === "confirm" && aiSuggestion?.documentId) {
+        // Fire and forget — hapus dokumen draft saat user pindah halaman
+        fetch(`/api/documents?id=${aiSuggestion.documentId}`, { method: "DELETE" }).catch(() => {});
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, aiSuggestion?.documentId]);
 
   // Fetch party suggestions — trigger dari 1 karakter
   useEffect(() => {
@@ -126,9 +147,20 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
     }
   };
 
-  const cancelAndDelete = async (documentId: string) => {
-    try { await fetch(`/api/documents?id=${documentId}`, { method: "DELETE" }); }
-    catch (e) { console.error("Failed to delete cancelled doc:", e); }
+  const cancelAndDelete = async (documentId?: string, path?: string) => {
+    try {
+      // Hapus via document ID (hapus DB record + storage sekaligus di API)
+      if (documentId) {
+        await fetch(`/api/documents?id=${documentId}`, { method: "DELETE" });
+      } else if (path) {
+        // Dokumen belum sempat tersimpan di DB, hapus langsung dari storage
+        await fetch("/api/documents/cancel-upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ storagePath: path }),
+        });
+      }
+    } catch (e) { console.error("Failed to delete cancelled doc:", e); }
   };
 
   const handleUpload = async () => {
@@ -269,14 +301,26 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
     }
   };
 
-  const handleCancel = async () => {
-    if (aiSuggestion?.documentId) await cancelAndDelete(aiSuggestion.documentId);
+  const doCancel = async () => {
+    if (aiSuggestion?.documentId) {
+      await cancelAndDelete(aiSuggestion.documentId);
+    } else if (storagePath) {
+      await cancelAndDelete(undefined, storagePath);
+    }
     setSelectedFile(null); setTitle(""); setStage("idle"); setProgress(0); setMessage("");
     setAiSuggestion(null); setStoragePath(""); setOverrideReason("");
     setSelectedCategory(""); setEditedSummary("");
     setParties([]); setPartyInput(""); setDuplicates([]);
     setSelectedDocNumber(""); setIssuedNumbers([]);
-    setValidUntil("");
+    setValidUntil(""); setShowWarning(false);
+  };
+
+  const handleCancel = async () => {
+    if (hasUnsavedChanges) {
+      setShowWarning(true);
+    } else {
+      await doCancel();
+    }
   };
 
   const isOverride = aiSuggestion && selectedClassification !== aiSuggestion.classification;
@@ -478,11 +522,13 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
                 onChange={(e) => setSelectedCategory(e.target.value)}
                 style={{ width: "100%", border: `1px solid ${selectedCategory !== aiSuggestion.category ? "#FDE68A" : "#E5E7EB"}`, borderRadius: 10, padding: "9px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", backgroundColor: "white", cursor: "pointer" }}
               >
-                {categories.filter(c => c.id !== "lainnya").map(cat => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.label}{cat.id === aiSuggestion.category ? " ✦ (saran AI)" : ""}
-                  </option>
-                ))}
+                {[...categories.filter(c => c.id !== "lainnya")]
+                  .sort((a, b) => a.label.localeCompare(b.label, "id"))
+                  .map(cat => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.label}{cat.id === aiSuggestion.category ? " ✦ (saran AI)" : ""}
+                    </option>
+                  ))}
               </select>
             </div>
 
@@ -621,6 +667,28 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
             <p style={{ fontSize: 13, color: "#DC2626", margin: 0, fontWeight: 500 }}>{message}</p>
           </div>
           <button onClick={handleCancel} style={{ fontSize: 12, color: "#0344D8", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>Coba lagi →</button>
+        </div>
+      )}
+      {/* Warning Modal */}
+      {showWarning && (
+        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ backgroundColor: "white", borderRadius: 16, padding: 24, maxWidth: 380, width: "90%", boxShadow: "0 20px 60px rgba(0,0,0,0.2)", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+            <p style={{ fontSize: 20, margin: "0 0 8px" }}>⚠️</p>
+            <p style={{ fontSize: 15, fontWeight: 700, color: "#1A1F2E", margin: "0 0 8px" }}>Batalkan upload?</p>
+            <p style={{ fontSize: 13, color: "#6B7280", margin: "0 0 20px", lineHeight: 1.5 }}>
+              Kamu sudah mengisi beberapa informasi. Dokumen akan dihapus permanen dan tidak bisa dikembalikan.
+            </p>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={doCancel}
+                style={{ flex: 1, backgroundColor: "#DC2626", color: "white", border: "none", borderRadius: 10, padding: "10px 0", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                Ya, batalkan
+              </button>
+              <button onClick={() => setShowWarning(false)}
+                style={{ flex: 1, backgroundColor: "#F3F4F6", color: "#374151", border: "none", borderRadius: 10, padding: "10px 0", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                Kembali
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

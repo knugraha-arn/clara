@@ -115,31 +115,13 @@ export async function POST(request: NextRequest) {
       await Promise.allSettled(embeddingPromises);
     }
 
-    // 8. Mark ready
+    // 8. Mark draft — dokumen belum dikonfirmasi user
     await supabase.from("documents").update({
-      status: "ready",
+      status: "draft",
       updated_at: new Date().toISOString(),
     }).eq("id", doc.id);
 
-    // 9. Log audit trail
-    await logEvent({
-      supabase: adminSupabase,
-      documentId: doc.id,
-      documentTitle: doc.title,
-      userId: user.id,
-      userEmail: user.email || "",
-      userName: profile?.full_name || undefined,
-      eventType: "uploaded",
-      metadata: {
-        category: aiResult.category,
-        classification: finalClassification,
-        classification_ai: aiResult.classification,
-        classification_overridden: isOverridden,
-        file_size: fileSize,
-        page_count: pageCount,
-      },
-      request,
-    });
+    // Audit log akan dicatat saat user konfirmasi di update-classification
 
     return NextResponse.json({
       success: true,

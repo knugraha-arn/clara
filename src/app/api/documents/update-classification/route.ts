@@ -13,25 +13,25 @@ export async function POST(request: NextRequest) {
 
   const { data: doc } = await supabase
     .from("documents")
-    .select("id, title, classification, classification_ai_suggestion, category")
+    .select("id, title, classification, classification_ai_suggestion, category, file_size, page_count")
     .eq("file_path", storagePath)
     .single();
 
   if (!doc) return NextResponse.json({ error: "Dokumen tidak ditemukan" }, { status: 404 });
 
+  const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", user.id).single();
+
   const updateData: Record<string, unknown> = {
+    status: "ready",  // dokumen resmi tersimpan saat user konfirmasi
     updated_at: new Date().toISOString(),
   };
 
-  // Selalu update summary jika ada
   if (summary !== undefined && summary !== null) {
     updateData.summary = summary;
   }
 
-  // Selalu update valid_until (bisa null untuk hapus)
   updateData.valid_until = validUntil || null;
 
-  // Update klasifikasi jika berubah
   const isClassificationChanged = classification && classification !== doc.classification;
   if (isClassificationChanged) {
     updateData.classification = classification;
@@ -39,7 +39,6 @@ export async function POST(request: NextRequest) {
     updateData.classification_override_reason = overrideReason || null;
   }
 
-  // Update kategori jika berubah
   if (category && category !== doc.category) {
     updateData.category = category;
     updateData.category_overridden = true;
@@ -48,9 +47,27 @@ export async function POST(request: NextRequest) {
 
   await supabase.from("documents").update(updateData).eq("id", doc.id);
 
-  // Log audit hanya jika ada perubahan klasifikasi atau kategori
+  // Log audit uploaded — dicatat saat konfirmasi
+  await logEvent({
+    supabase: adminSupabase,
+    documentId: doc.id,
+    documentTitle: doc.title,
+    userId: user.id,
+    userEmail: user.email || "",
+    userName: profile?.full_name || undefined,
+    eventType: "uploaded",
+    metadata: {
+      category: (category && category !== doc.category) ? category : doc.category,
+      classification: isClassificationChanged ? classification : doc.classification,
+      classification_overridden: isClassificationChanged,
+      file_size: doc.file_size,
+      page_count: doc.page_count,
+    },
+    request,
+  });
+
+  // Log classification_changed jika ada perubahan dari saran AI
   if (isClassificationChanged || (category && category !== doc.category)) {
-    const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", user.id).single();
     await logEvent({
       supabase: adminSupabase,
       documentId: doc.id,
