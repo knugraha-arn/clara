@@ -18,7 +18,7 @@ export async function PATCH(
     .from("profiles").select("role, full_name").eq("id", user.id).single();
 
   const { id } = await params;
-  const { action, note, documentId, description } = await request.json();
+  const { action, note, documentId, description, approval_consent } = await request.json();
 
   const { data: docNum } = await supabase
     .from("document_numbers").select("*").eq("id", id).single();
@@ -34,6 +34,8 @@ export async function PATCH(
   if (action === "approve") {
     if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     if (docNum.status !== "pending") return NextResponse.json({ error: "Hanya bisa approve status Pending" }, { status: 400 });
+    if (!note?.trim()) return NextResponse.json({ error: "Catatan approval wajib diisi" }, { status: 400 });
+    if (!approval_consent) return NextResponse.json({ error: "Consent wajib dicentang" }, { status: 400 });
 
     await supabase.from("document_numbers").update({
       status: "issued",
@@ -42,6 +44,8 @@ export async function PATCH(
       reviewed_at: now,
       review_action: "approved",
       review_note: note || null,
+      approval_note: note || null,
+      approval_consent: true,
       updated_at: now,
     }).eq("id", id);
 

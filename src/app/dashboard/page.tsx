@@ -167,32 +167,21 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Filter chips + page size */}
+          {/* Sort controls + page size */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {/* Chip Semua */}
-              <button onClick={() => handleCategoryClick("all")}
-                style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600, border: "1px solid", cursor: "pointer", fontFamily: "inherit", backgroundColor: activeCategory === "all" ? "#0344D8" : "white", color: activeCategory === "all" ? "white" : "#6B7280", borderColor: activeCategory === "all" ? "#0344D8" : "#E5E7EB", transition: "all 0.15s" }}>
-                Semua
-                <span style={{ fontSize: 11, fontWeight: 700, backgroundColor: activeCategory === "all" ? "rgba(255,255,255,0.25)" : "#EEF2FF", color: activeCategory === "all" ? "white" : "#0344D8", padding: "0px 6px", borderRadius: 10 }}>
-                  {total}
-                </span>
-              </button>
-              {/* Chip per kategori */}
-              {activeCategories.map(cat => {
-                const catColor = CAT_COLORS[cat]?.color || "#9CA3AF";
-                const catBg = CAT_COLORS[cat]?.bg || "#F9FAFB";
-                const isActive = activeCategory === cat;
-                return (
-                  <button key={cat} onClick={() => handleCategoryClick(cat)}
-                    style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600, border: `1px solid ${isActive ? catColor : "#E5E7EB"}`, cursor: "pointer", fontFamily: "inherit", backgroundColor: isActive ? catColor : "white", color: isActive ? "white" : catColor, transition: "all 0.15s" }}>
-                    {CATEGORY_LABELS[cat as DocumentCategory] || cat}
-                    <span style={{ fontSize: 11, fontWeight: 700, backgroundColor: isActive ? "rgba(255,255,255,0.25)" : catBg, color: isActive ? "white" : catColor, padding: "0px 6px", borderRadius: 10 }}>
-                      {categoryCounts[cat] || 0}
-                    </span>
-                  </button>
-                );
-              })}
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <span style={{ fontSize: 12, color: "#9CA3AF" }}>Urutkan:</span>
+              {[
+                { key: "created_at" as SortKey, label: "Terbaru" },
+                { key: "title" as SortKey, label: "Nama" },
+                { key: "file_size" as SortKey, label: "Ukuran" },
+              ].map(s => (
+                <button key={s.key} onClick={() => handleSort(s.key)}
+                  style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 500, border: "1px solid", cursor: "pointer", fontFamily: "inherit", backgroundColor: sortKey === s.key ? "#1A1F2E" : "white", color: sortKey === s.key ? "white" : "#6B7280", borderColor: sortKey === s.key ? "#1A1F2E" : "#E5E7EB" }}>
+                  {s.label}
+                  {sortKey === s.key && <span style={{ fontSize: 10 }}>{sortDir === "asc" ? "↑" : "↓"}</span>}
+                </button>
+              ))}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
               <span style={{ fontSize: 12, color: "#9CA3AF" }}>Tampilkan</span>

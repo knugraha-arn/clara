@@ -28,23 +28,34 @@ interface DocNumber {
   created_by: string; created_by_name: string; reviewed_by_name: string | null;
   review_action: string | null; review_note: string | null; reviewed_at: string | null;
   void_reason: string | null; voided_by_name: string | null; voided_at: string | null;
+  backdated_reason: string | null; backdated_consent: boolean;
+  approval_note: string | null; approval_consent: boolean;
   created_at: string; updated_at: string;
 }
 
 interface Party { id: string; name: string; doc_count: number; abbreviation: string; }
 
-function ActionModal({ title, placeholder, onConfirm, onCancel, confirmLabel, confirmColor }:
-  { title: string; placeholder: string; onConfirm: (note: string) => void; onCancel: () => void; confirmLabel: string; confirmColor: string }) {
+function ActionModal({ title, placeholder, onConfirm, onCancel, confirmLabel, confirmColor, requireConsent, consentLabel }:
+  { title: string; placeholder: string; onConfirm: (note: string, consent: boolean) => void; onCancel: () => void; confirmLabel: string; confirmColor: string; requireConsent?: boolean; consentLabel?: string }) {
   const [note, setNote] = useState("");
+  const [consent, setConsent] = useState(false);
+  const canConfirm = note.trim() && (!requireConsent || consent);
   return (
     <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ backgroundColor: "white", borderRadius: 16, padding: 24, width: 420, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+      <div style={{ backgroundColor: "white", borderRadius: 16, padding: 24, width: 440, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
         <p style={{ fontSize: 15, fontWeight: 700, color: "#1A1F2E", margin: "0 0 12px" }}>{title}</p>
         <textarea value={note} onChange={e => setNote(e.target.value)} placeholder={placeholder} rows={3}
           style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "9px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", resize: "none", boxSizing: "border-box" }} />
-        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-          <button onClick={() => onConfirm(note)} disabled={!note.trim()}
-            style={{ flex: 1, backgroundColor: confirmColor, color: "white", border: "none", borderRadius: 10, padding: "10px 0", fontSize: 13, fontWeight: 600, cursor: note.trim() ? "pointer" : "not-allowed", opacity: note.trim() ? 1 : 0.5, fontFamily: "inherit" }}>
+        {requireConsent && consentLabel && (
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 10, marginTop: 12, cursor: "pointer" }}>
+            <input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)}
+              style={{ marginTop: 2, width: 16, height: 16, flexShrink: 0, cursor: "pointer" }} />
+            <span style={{ fontSize: 12, color: "#374151", lineHeight: 1.5 }}>{consentLabel}</span>
+          </label>
+        )}
+        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+          <button onClick={() => onConfirm(note, consent)} disabled={!canConfirm}
+            style={{ flex: 1, backgroundColor: confirmColor, color: "white", border: "none", borderRadius: 10, padding: "10px 0", fontSize: 13, fontWeight: 600, cursor: canConfirm ? "pointer" : "not-allowed", opacity: canConfirm ? 1 : 0.5, fontFamily: "inherit" }}>
             {confirmLabel}
           </button>
           <button onClick={onCancel}
@@ -83,6 +94,8 @@ export default function NumbersPage() {
   const [formCategory, setFormCategory] = useState("surat_keluar");
   const [formClassification, setFormClassification] = useState("internal");
   const [formDescription, setFormDescription] = useState("");
+  const [formBackdatedReason, setFormBackdatedReason] = useState("");
+  const [formBackdatedConsent, setFormBackdatedConsent] = useState(false);
   const [previewNumber, setPreviewNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const partyInputRef = useRef<HTMLInputElement>(null);
@@ -129,13 +142,13 @@ export default function NumbersPage() {
     setPreviewNumber(`XXX/${partyCode}/${ROMAN[month]}/${year}`);
   }, [formPartyInput, formPartyAbbrev, formDate]);
 
-  const handleAction = async (id: string, action: string, note?: string) => {
+  const handleAction = async (id: string, action: string, note?: string, consent?: boolean) => {
     setActionLoading(id + action);
     try {
       const res = await fetch(`/api/document-numbers/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, note }),
+        body: JSON.stringify({ action, note, approval_consent: consent }),
       });
       if (!res.ok) throw new Error();
       const actionLabels: Record<string, string> = { approve: "disetujui", reject: "ditolak", void: "dibatalkan" };
@@ -151,6 +164,7 @@ export default function NumbersPage() {
 
   const handleSubmit = async () => {
     if (!formPartyInput.trim() || !formDescription.trim()) return;
+    if (isBackdated && (!formBackdatedReason.trim() || !formBackdatedConsent)) return;
     setSubmitting(true);
     const res = await fetch("/api/document-numbers", {
       method: "POST",
@@ -164,6 +178,8 @@ export default function NumbersPage() {
         category: formCategory,
         classification: formClassification,
         description: formDescription,
+        backdated_reason: isBackdated ? formBackdatedReason : null,
+        backdated_consent: isBackdated ? formBackdatedConsent : false,
       }),
     });
     const data = await res.json();
@@ -171,6 +187,7 @@ export default function NumbersPage() {
       setShowForm(false);
       setFormPartyInput(""); setFormPartyId(null); setFormPartyAbbrev(""); setFormDescription(""); setPreviewNumber("");
       setFormDate(new Date().toISOString().split("T")[0]);
+      setFormBackdatedReason(""); setFormBackdatedConsent(false);
       await fetchNumbers();
       toastSuccess(data.status === "pending" ? "Nomor surat menunggu persetujuan admin." : `Nomor surat ${data.number?.number} berhasil dibuat.`);
     } else {
@@ -231,10 +248,22 @@ export default function NumbersPage() {
       {modal && (
         <ActionModal
           title={modal.title}
-          placeholder={modal.type === "revision" ? "Catatan revisi untuk contributor..." : modal.type === "reject" ? "Alasan penolakan (wajib)..." : "Alasan void (wajib)..."}
-          confirmLabel={modal.type === "revision" ? "Kirim Revisi" : modal.type === "reject" ? "Tolak Nomor" : "Void Nomor"}
-          confirmColor={modal.type === "revision" ? "#D97706" : "#DC2626"}
-          onConfirm={(note) => handleAction(modal.id, modal.type, note)}
+          placeholder={
+            modal.type === "approve" ? "Catatan approval (wajib)... misal: Dokumen fisik sudah diverifikasi" :
+            modal.type === "revision" ? "Catatan revisi untuk contributor..." :
+            modal.type === "reject" ? "Alasan penolakan (wajib)..." :
+            "Alasan void (wajib)..."
+          }
+          confirmLabel={
+            modal.type === "approve" ? "✅ Setujui" :
+            modal.type === "revision" ? "Kirim Revisi" :
+            modal.type === "reject" ? "Tolak Nomor" :
+            "Void Nomor"
+          }
+          confirmColor={modal.type === "approve" ? "#16A34A" : modal.type === "revision" ? "#D97706" : "#DC2626"}
+          requireConsent={modal.type === "approve"}
+          consentLabel="Saya menyetujui dan bertanggung jawab atas approval backdated ini. Tindakan ini tercatat dalam audit trail sebagai persetujuan resmi saya."
+          onConfirm={(note, consent) => handleAction(modal.id, modal.type, note, consent)}
           onCancel={() => setModal(null)}
         />
       )}
@@ -295,7 +324,7 @@ export default function NumbersPage() {
                 <p style={{ fontSize: 22, fontWeight: 800, color: "#0344D8", margin: 0, letterSpacing: "0.5px" }}>{previewNumber}</p>
                 {isBackdated && (
                   <p style={{ fontSize: 11, color: "#D97706", margin: "4px 0 0", fontWeight: 600 }}>
-                    ⚠️ Backdated · {role === "contributor" ? "Memerlukan approval Admin" : "Langsung Issued"}
+                    ⚠️ Backdated · {role === "contributor" ? "Memerlukan approval Admin" : "Admin — langsung Issued"}
                   </p>
                 )}
               </div>
@@ -312,7 +341,7 @@ export default function NumbersPage() {
                 <label style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", display: "block", marginBottom: 4 }}>Jenis Dokumen</label>
                 <select value={formCategory} onChange={e => setFormCategory(e.target.value)}
                   style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "8px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}>
-                  {categories.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                  {[...categories].sort((a, b) => a.label.localeCompare(b.label, "id")).map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                 </select>
               </div>
 
@@ -382,9 +411,31 @@ export default function NumbersPage() {
                 style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "8px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", resize: "vertical", boxSizing: "border-box" }} />
             </div>
 
+            {/* Backdated fields — muncul hanya kalau tanggal mundur */}
+            {isBackdated && (
+              <div style={{ marginTop: 12, backgroundColor: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, padding: "14px 16px" }}>
+                <p style={{ fontSize: 12, fontWeight: 700, color: "#D97706", margin: "0 0 10px" }}>⚠️ Dokumen Backdated — Wajib Diisi</p>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "#92400E", display: "block", marginBottom: 4 }}>
+                    Alasan Backdated <span style={{ color: "#DC2626" }}>*</span>
+                  </label>
+                  <textarea value={formBackdatedReason} onChange={e => setFormBackdatedReason(e.target.value)} rows={2}
+                    placeholder="Contoh: Dokumen fisik sudah ditandatangani 3 hari lalu, baru bisa diinput sekarang karena..."
+                    style={{ width: "100%", border: `1px solid ${formBackdatedReason.trim() ? "#FDE68A" : "#FECACA"}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, fontFamily: "inherit", outline: "none", resize: "none", boxSizing: "border-box", backgroundColor: "white" }} />
+                </div>
+                <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+                  <input type="checkbox" checked={formBackdatedConsent} onChange={e => setFormBackdatedConsent(e.target.checked)}
+                    style={{ marginTop: 2, width: 16, height: 16, flexShrink: 0, cursor: "pointer" }} />
+                  <span style={{ fontSize: 12, color: "#92400E", lineHeight: 1.5 }}>
+                    Saya menyatakan bahwa data backdated ini akurat dan dapat dipertanggungjawabkan. Tindakan ini tercatat dalam audit trail.
+                  </span>
+                </label>
+              </div>
+            )}
+
             <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-              <button onClick={handleSubmit} disabled={!formPartyInput.trim() || !formDescription.trim() || submitting}
-                style={{ flex: 1, backgroundColor: "#0344D8", color: "white", border: "none", borderRadius: 10, padding: "11px 0", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", opacity: !formPartyInput.trim() || !formDescription.trim() || submitting ? 0.5 : 1 }}>
+              <button onClick={handleSubmit} disabled={!formPartyInput.trim() || !formDescription.trim() || submitting || (isBackdated && (!formBackdatedReason.trim() || !formBackdatedConsent))}
+                style={{ flex: 1, backgroundColor: "#0344D8", color: "white", border: "none", borderRadius: 10, padding: "11px 0", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", opacity: (!formPartyInput.trim() || !formDescription.trim() || submitting || (isBackdated && (!formBackdatedReason.trim() || !formBackdatedConsent))) ? 0.5 : 1 }}>
                 {submitting ? "Membuat..." : isBackdated && role === "contributor" ? "Ajukan (Perlu Approval)" : "Buat Nomor Surat"}
               </button>
               <button onClick={() => { setShowForm(false); setFormPartyInput(""); setFormDescription(""); setPreviewNumber(""); }}
@@ -413,9 +464,16 @@ export default function NumbersPage() {
                         </div>
                         <p style={{ fontSize: 12, color: "#6B7280", margin: "0 0 2px" }}>{num.description}</p>
                         <p style={{ fontSize: 11, color: "#9CA3AF", margin: 0 }}>{CAT_LABELS[num.category]} · {formatDate(num.date)} · oleh: {num.created_by_name}</p>
+                        {num.backdated_reason && (
+                          <div style={{ marginTop: 6, backgroundColor: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 6, padding: "6px 10px" }}>
+                            <p style={{ fontSize: 11, color: "#92400E", margin: 0 }}>
+                              <strong>Alasan backdated:</strong> {num.backdated_reason}
+                            </p>
+                          </div>
+                        )}
                       </div>
                       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                        <button onClick={() => handleAction(num.id, "approve")} disabled={!!actionLoading}
+                        <button onClick={() => setModal({ type: "approve", id: num.id, title: "Approve Nomor Backdated" })} disabled={!!actionLoading}
                           style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #BBF7D0", backgroundColor: "#F0FDF4", color: "#16A34A", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
                           ✅ Approve
                         </button>
@@ -438,20 +496,22 @@ export default function NumbersPage() {
 
         {/* Filters */}
         <div style={{ display: "flex", gap: 8, marginBottom: 14, alignItems: "center", flexWrap: "wrap" }}>
-          <div style={{ display: "flex", gap: 4 }}>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
             {[
-              { value: "all", label: "Semua" },
-              { value: "draft", label: "✏️ Draft" },
-              { value: "pending", label: "⏳ Pending" },
-              { value: "issued", label: "✅ Issued" },
-              { value: "linked", label: "🔗 Linked" },
-              { value: "rejected", label: "❌ Rejected" },
-              { value: "void", label: "⊘ Void" },
+              { value: "all",      label: "Semua",    tooltip: "Semua nomor surat" },
+              { value: "pending",  label: "⏳ Pending",  tooltip: "Nomor backdated yang menunggu approval admin" },
+              { value: "issued",   label: "✅ Issued",   tooltip: "Nomor aktif, belum ada dokumen terlampir" },
+              { value: "linked",   label: "🔗 Linked",   tooltip: "Nomor aktif, sudah ada dokumen terlampir" },
+              { value: "rejected", label: "❌ Rejected", tooltip: "Nomor backdated yang ditolak admin" },
+              { value: "void",     label: "⊘ Void",     tooltip: "Nomor yang dibatalkan setelah Issued/Linked" },
             ].map(f => (
-              <button key={f.value} onClick={() => setStatusFilter(f.value)}
-                style={{ padding: "5px 12px", borderRadius: 7, fontSize: 12, fontWeight: 500, border: "1px solid", cursor: "pointer", fontFamily: "inherit", backgroundColor: statusFilter === f.value ? "#1A1F2E" : "white", color: statusFilter === f.value ? "white" : "#6B7280", borderColor: statusFilter === f.value ? "#1A1F2E" : "#E5E7EB" }}>
-                {f.label}
-              </button>
+              <div key={f.value} style={{ position: "relative" }} className="chip-wrapper">
+                <button onClick={() => setStatusFilter(f.value)}
+                  title={f.tooltip}
+                  style={{ padding: "5px 12px", borderRadius: 7, fontSize: 12, fontWeight: 500, border: "1px solid", cursor: "pointer", fontFamily: "inherit", backgroundColor: statusFilter === f.value ? "#1A1F2E" : "white", color: statusFilter === f.value ? "white" : "#6B7280", borderColor: statusFilter === f.value ? "#1A1F2E" : "#E5E7EB" }}>
+                  {f.label}
+                </button>
+              </div>
             ))}
           </div>
           <select value={yearFilter} onChange={e => setYearFilter(e.target.value)}

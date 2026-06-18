@@ -41,8 +41,6 @@ export default function SearchPage() {
   const [filterDateTo, setFilterDateTo] = useState("");
   const [filterUploaderId, setFilterUploaderId] = useState("");
   const [uploaders, setUploaders] = useState<Uploader[]>([]);
-  const [showFilters, setShowFilters] = useState(false);
-
   const activeFilterCount = [filterCategory, filterClassification, filterDateFrom, filterDateTo, filterUploaderId].filter(Boolean).length;
 
   const classificationOptions = allowedClassificationOptions(role);
@@ -97,8 +95,70 @@ export default function SearchPage() {
 
         <div style={{ padding: "20px 28px" }}>
 
-          {/* Search input + filter toggle */}
-          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          {/* Filter panel — selalu tampil di atas */}
+          <div style={{ backgroundColor: "white", border: "1px solid #E5E7EB", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Filter</span>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {activeFilterCount > 0 && (
+                  <button onClick={handleReset}
+                    style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #FECACA", backgroundColor: "#FEF2F2", color: "#DC2626", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                    Reset filter
+                  </button>
+                )}
+                {activeFilterCount > 0 && (
+                  <span style={{ fontSize: 11, backgroundColor: "#0344D8", color: "white", padding: "2px 8px", borderRadius: 10, fontWeight: 700 }}>{activeFilterCount} aktif</span>
+                )}
+              </div>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
+              {/* Kategori */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Kategori</label>
+                <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} style={selectStyle}>
+                  <option value="">Semua kategori</option>
+                  {categoryOptions.map(([id, label]) => (
+                    <option key={id} value={id}>{label}</option>
+                  ))}
+                </select>
+              </div>
+              {/* Klasifikasi */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Klasifikasi</label>
+                <select value={filterClassification} onChange={e => setFilterClassification(e.target.value)} style={selectStyle}>
+                  <option value="">Semua klasifikasi</option>
+                  {classificationOptions.map(cls => (
+                    <option key={cls} value={cls}>{CLS_LABELS[cls]}</option>
+                  ))}
+                </select>
+              </div>
+              {/* Tanggal dari */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Dari tanggal</label>
+                <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} style={selectStyle} />
+              </div>
+              {/* Tanggal sampai */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Sampai tanggal</label>
+                <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} style={selectStyle} />
+              </div>
+              {/* Uploader */}
+              {uploaders.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Diupload oleh</label>
+                  <select value={filterUploaderId} onChange={e => setFilterUploaderId(e.target.value)} style={selectStyle}>
+                    <option value="">Semua pengunggah</option>
+                    {uploaders.map(u => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Search input + AI tooltip */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
             <div style={{ position: "relative", flex: 1 }}>
               <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 16, pointerEvents: "none" }}>🔍</div>
               <input type="text" value={query}
@@ -112,15 +172,6 @@ export default function SearchPage() {
                 {loading ? "..." : "Cari"}
               </button>
             </div>
-
-            {/* Filter toggle */}
-            <button onClick={() => setShowFilters(f => !f)}
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 16px", borderRadius: 12, border: `1px solid ${activeFilterCount > 0 ? "#0344D8" : "#E5E7EB"}`, backgroundColor: activeFilterCount > 0 ? "#EEF2FF" : "white", color: activeFilterCount > 0 ? "#0344D8" : "#6B7280", fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>
-              ⚙️ Filter
-              {activeFilterCount > 0 && (
-                <span style={{ backgroundColor: "#0344D8", color: "white", borderRadius: 10, padding: "1px 6px", fontSize: 11, fontWeight: 700 }}>{activeFilterCount}</span>
-              )}
-            </button>
 
             {/* AI tooltip */}
             <div style={{ position: "relative" }}>
@@ -149,66 +200,6 @@ export default function SearchPage() {
               )}
             </div>
           </div>
-
-          {/* Filter panel */}
-          {showFilters && (
-            <div style={{ backgroundColor: "white", border: "1px solid #E5E7EB", borderRadius: 12, padding: "14px 16px", marginBottom: 14, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
-              {/* Kategori */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Kategori</label>
-                <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} style={selectStyle}>
-                  <option value="">Semua kategori</option>
-                  {categoryOptions.map(([id, label]) => (
-                    <option key={id} value={id}>{label}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Klasifikasi */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Klasifikasi</label>
-                <select value={filterClassification} onChange={e => setFilterClassification(e.target.value)} style={selectStyle}>
-                  <option value="">Semua klasifikasi</option>
-                  {classificationOptions.map(cls => (
-                    <option key={cls} value={cls}>{CLS_LABELS[cls]}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Tanggal dari */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Dari tanggal</label>
-                <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} style={selectStyle} />
-              </div>
-
-              {/* Tanggal sampai */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Sampai tanggal</label>
-                <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} style={selectStyle} />
-              </div>
-
-              {/* Uploader */}
-              {uploaders.length > 0 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Diupload oleh</label>
-                  <select value={filterUploaderId} onChange={e => setFilterUploaderId(e.target.value)} style={selectStyle}>
-                    <option value="">Semua pengunggah</option>
-                    {uploaders.map(u => (
-                      <option key={u.id} value={u.id}>{u.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Reset */}
-              {activeFilterCount > 0 && (
-                <button onClick={handleReset}
-                  style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid #FECACA", backgroundColor: "#FEF2F2", color: "#DC2626", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
-                  Reset filter
-                </button>
-              )}
-            </div>
-          )}
 
           {/* Hints */}
           {!searched && (
