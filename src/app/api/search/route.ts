@@ -32,17 +32,6 @@ export async function GET(request: NextRequest) {
   const results: (SearchResult & { uploader_name?: string })[] = [];
   const seenIds = new Set<string>();
 
-  // Helper — apply additional filters ke query
-  const applyFilters = (q: ReturnType<typeof supabase.from>) => {
-    let filtered = q;
-    if (filterCategory) filtered = filtered.eq("category", filterCategory);
-    if (filterClassification) filtered = filtered.eq("classification", filterClassification);
-    if (filterDateFrom) filtered = filtered.gte("created_at", filterDateFrom);
-    if (filterDateTo) filtered = filtered.lte("created_at", filterDateTo + "T23:59:59Z");
-    if (filterUploaderId) filtered = filtered.eq("user_id", filterUploaderId);
-    return filtered;
-  };
-
   // 1. EXACT MATCH — filter classification sesuai role + tambahan filter
   let exactQuery = supabase
     .from("documents")
@@ -51,7 +40,11 @@ export async function GET(request: NextRequest) {
     .in("classification", classifications)
     .or(`title.ilike.%${query}%,summary.ilike.%${query}%,extracted_text_page1.ilike.%${query}%`)
     .limit(5);
-  exactQuery = applyFilters(exactQuery) as typeof exactQuery;
+  if (filterCategory) exactQuery = exactQuery.eq("category", filterCategory);
+  if (filterClassification) exactQuery = exactQuery.eq("classification", filterClassification);
+  if (filterDateFrom) exactQuery = exactQuery.gte("created_at", filterDateFrom);
+  if (filterDateTo) exactQuery = exactQuery.lte("created_at", filterDateTo + "T23:59:59Z");
+  if (filterUploaderId) exactQuery = exactQuery.eq("user_id", filterUploaderId);
   const { data: exactDocs } = await exactQuery;
 
   if (exactDocs) {
@@ -83,7 +76,11 @@ export async function GET(request: NextRequest) {
             .select("*")
             .in("id", semanticDocIds)
             .in("classification", classifications);
-          semanticQuery = applyFilters(semanticQuery) as typeof semanticQuery;
+          if (filterCategory) semanticQuery = semanticQuery.eq("category", filterCategory);
+          if (filterClassification) semanticQuery = semanticQuery.eq("classification", filterClassification);
+          if (filterDateFrom) semanticQuery = semanticQuery.gte("created_at", filterDateFrom);
+          if (filterDateTo) semanticQuery = semanticQuery.lte("created_at", filterDateTo + "T23:59:59Z");
+          if (filterUploaderId) semanticQuery = semanticQuery.eq("user_id", filterUploaderId);
           const { data: semanticDocs } = await semanticQuery;
 
           if (semanticDocs) {
