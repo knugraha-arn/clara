@@ -41,17 +41,6 @@ export const CATEGORY_LABELS: Record<DocumentCategory, string> = {
   lainnya:         "Lainnya",
 };
 
-export const CATEGORY_COLORS: Record<DocumentCategory, string> = {
-  surat_masuk: "bg-blue-100 text-blue-700",
-  surat_keluar: "bg-lime-100 text-lime-700",
-  kontrak: "bg-amber-100 text-amber-700",
-  memo: "bg-gray-100 text-gray-700",
-  laporan: "bg-indigo-100 text-indigo-700",
-  kebijakan: "bg-red-100 text-red-700",
-  undangan: "bg-pink-100 text-pink-700",
-  pengumuman: "bg-orange-100 text-orange-700",
-  lainnya: "bg-gray-100 text-gray-500",
-};
 
 // ─── Klasifikasi ────────────────────────────────────────────────────────────
 export const CLS_CFG: Record<string, { label: string; color: string; bg: string }> = {
