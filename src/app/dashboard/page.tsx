@@ -7,7 +7,7 @@ import DocumentUpload from "@/components/documents/DocumentUpload";
 import DocumentSidePanel from "@/components/documents/DocumentSidePanel";
 import { useRole } from "@/components/layout/DashboardShell";
 import { useToast } from "@/components/ui/Toast";
-import { SkeletonPage, SkeletonStatCard } from "@/components/ui/Skeleton";
+import { SkeletonPage } from "@/components/ui/Skeleton";
 import { CATEGORY_LABELS, CLS_CFG, CAT_COLORS, formatDateShort, formatSize } from "@/lib/utils";
 import type { Document, DocumentCategory } from "@/types";
 
@@ -25,6 +25,7 @@ export default function DashboardPage() {
   const canUpload = ["contributor", "admin", "super_admin"].includes(role);
   const [documents, setDocuments] = useState<DocWithUploader[]>([]);
   const [activeCategories, setActiveCategories] = useState<DocumentCategory[]>([]);
+  const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -56,7 +57,10 @@ export default function DashboardPage() {
       setDocuments(data.documents || []);
       setTotal(data.total ?? 0);
       setTotalPages(data.totalPages ?? 1);
-      if (p === 1 && cat === "all") setActiveCategories(data.activeCategories || []);
+      if (p === 1 && cat === "all") {
+        setActiveCategories(data.activeCategories || []);
+        setCategoryCounts(data.categoryCounts || {});
+      }
     } catch {
       toastError("Gagal memuat dokumen. Coba refresh halaman.");
     } finally {
@@ -105,16 +109,6 @@ export default function DashboardPage() {
   const paginated = documents; // sudah dipaginasi dari server
   const today = new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(new Date());
 
-  const statCards = [
-    { label: "Total Dokumen", value: total, color: "#0344D8", cat: "all" },
-    ...activeCategories.map(cat => ({
-      label: CATEGORY_LABELS[cat as DocumentCategory] || cat,
-      value: "—",
-      color: CAT_COLORS[cat]?.color || "#9CA3AF",
-      cat,
-    })),
-  ].slice(0, 4);
-
   const ColHeader = ({ label, col }: { label: string; col: SortKey }) => (
     <span onClick={() => handleSort(col)}
       style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 3 }}>
@@ -131,7 +125,14 @@ export default function DashboardPage() {
       <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
         {/* Top bar */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 28px", borderBottom: "1px solid #EFEFEF", backgroundColor: "white" }}>
-          <h1 style={{ fontSize: 17, fontWeight: 700, color: "#1A1F2E", margin: 0 }}>Dokumen</h1>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <h1 style={{ fontSize: 17, fontWeight: 700, color: "#1A1F2E", margin: 0 }}>Dokumen</h1>
+            {total > 0 && (
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#0344D8", backgroundColor: "#EEF2FF", padding: "2px 10px", borderRadius: 20 }}>
+                {total}
+              </span>
+            )}
+          </div>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <span style={{ fontSize: 13, color: "#9CA3AF" }}>{today}</span>
             <Image src="/arranet-logo-black.png" alt="Arranetwork" width={90} height={22} style={{ opacity: 0.35 }} />
@@ -166,32 +167,32 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Stat cards */}
-          {statCards.length > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns: `repeat(${statCards.length}, 1fr)`, gap: 12, marginBottom: 20 }}>
-              {statCards.map(stat => (
-                <div key={stat.label} onClick={() => handleCategoryClick(stat.cat)}
-                  style={{ backgroundColor: "white", border: `1px solid ${activeCategory === stat.cat ? stat.color : "#EFEFEF"}`, borderRadius: 12, padding: "14px 16px", cursor: "pointer" }}>
-                  <p style={{ fontSize: 12, color: "#9CA3AF", margin: "0 0 4px" }}>{stat.label}</p>
-                  <p style={{ fontSize: 24, fontWeight: 700, color: stat.color, margin: 0 }}>{stat.value}</p>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Filter + page size */}
+          {/* Filter chips + page size */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {/* Chip Semua */}
               <button onClick={() => handleCategoryClick("all")}
-                style={{ padding: "5px 12px", borderRadius: 7, fontSize: 12, fontWeight: 500, border: "1px solid", cursor: "pointer", fontFamily: "inherit", backgroundColor: activeCategory === "all" ? "#0344D8" : "white", color: activeCategory === "all" ? "white" : "#6B7280", borderColor: activeCategory === "all" ? "#0344D8" : "#E5E7EB" }}>
+                style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600, border: "1px solid", cursor: "pointer", fontFamily: "inherit", backgroundColor: activeCategory === "all" ? "#0344D8" : "white", color: activeCategory === "all" ? "white" : "#6B7280", borderColor: activeCategory === "all" ? "#0344D8" : "#E5E7EB", transition: "all 0.15s" }}>
                 Semua
+                <span style={{ fontSize: 11, fontWeight: 700, backgroundColor: activeCategory === "all" ? "rgba(255,255,255,0.25)" : "#EEF2FF", color: activeCategory === "all" ? "white" : "#0344D8", padding: "0px 6px", borderRadius: 10 }}>
+                  {total}
+                </span>
               </button>
-              {activeCategories.map(cat => (
-                <button key={cat} onClick={() => handleCategoryClick(cat)}
-                  style={{ padding: "5px 12px", borderRadius: 7, fontSize: 12, fontWeight: 500, border: "1px solid", cursor: "pointer", fontFamily: "inherit", backgroundColor: activeCategory === cat ? CAT_COLORS[cat]?.color : "white", color: activeCategory === cat ? "white" : "#6B7280", borderColor: activeCategory === cat ? CAT_COLORS[cat]?.color : "#E5E7EB" }}>
-                  {CATEGORY_LABELS[cat as DocumentCategory] || cat}
-                </button>
-              ))}
+              {/* Chip per kategori */}
+              {activeCategories.map(cat => {
+                const catColor = CAT_COLORS[cat]?.color || "#9CA3AF";
+                const catBg = CAT_COLORS[cat]?.bg || "#F9FAFB";
+                const isActive = activeCategory === cat;
+                return (
+                  <button key={cat} onClick={() => handleCategoryClick(cat)}
+                    style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600, border: `1px solid ${isActive ? catColor : "#E5E7EB"}`, cursor: "pointer", fontFamily: "inherit", backgroundColor: isActive ? catColor : "white", color: isActive ? "white" : catColor, transition: "all 0.15s" }}>
+                    {CATEGORY_LABELS[cat as DocumentCategory] || cat}
+                    <span style={{ fontSize: 11, fontWeight: 700, backgroundColor: isActive ? "rgba(255,255,255,0.25)" : catBg, color: isActive ? "white" : catColor, padding: "0px 6px", borderRadius: 10 }}>
+                      {categoryCounts[cat] || 0}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
               <span style={{ fontSize: 12, color: "#9CA3AF" }}>Tampilkan</span>

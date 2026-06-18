@@ -21,19 +21,38 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("q")?.trim();
+  const filterCategory = searchParams.get("category");
+  const filterClassification = searchParams.get("classification");
+  const filterDateFrom = searchParams.get("date_from");
+  const filterDateTo = searchParams.get("date_to");
+  const filterUploaderId = searchParams.get("uploader_id");
+
   if (!query) return NextResponse.json({ results: [] });
 
   const results: (SearchResult & { uploader_name?: string })[] = [];
   const seenIds = new Set<string>();
 
-  // 1. EXACT MATCH — filter classification sesuai role
-  const { data: exactDocs } = await supabase
+  // Helper — apply additional filters ke query
+  const applyFilters = (q: ReturnType<typeof supabase.from>) => {
+    let filtered = q;
+    if (filterCategory) filtered = filtered.eq("category", filterCategory);
+    if (filterClassification) filtered = filtered.eq("classification", filterClassification);
+    if (filterDateFrom) filtered = filtered.gte("created_at", filterDateFrom);
+    if (filterDateTo) filtered = filtered.lte("created_at", filterDateTo + "T23:59:59Z");
+    if (filterUploaderId) filtered = filtered.eq("user_id", filterUploaderId);
+    return filtered;
+  };
+
+  // 1. EXACT MATCH — filter classification sesuai role + tambahan filter
+  let exactQuery = supabase
     .from("documents")
     .select("*")
     .eq("status", "ready")
     .in("classification", classifications)
     .or(`title.ilike.%${query}%,summary.ilike.%${query}%,extracted_text_page1.ilike.%${query}%`)
     .limit(5);
+  exactQuery = applyFilters(exactQuery) as typeof exactQuery;
+  const { data: exactDocs } = await exactQuery;
 
   if (exactDocs) {
     for (const doc of exactDocs) {
@@ -58,12 +77,14 @@ export async function GET(request: NextRequest) {
           .filter(id => !seenIds.has(id as string));
 
         if (semanticDocIds.length > 0) {
-          // Filter classification di sini juga — RPC tidak selalu respect RLS
-          const { data: semanticDocs } = await supabase
+          // Filter classification + tambahan filter
+          let semanticQuery = supabase
             .from("documents")
             .select("*")
             .in("id", semanticDocIds)
             .in("classification", classifications);
+          semanticQuery = applyFilters(semanticQuery) as typeof semanticQuery;
+          const { data: semanticDocs } = await semanticQuery;
 
           if (semanticDocs) {
             for (const doc of semanticDocs) {

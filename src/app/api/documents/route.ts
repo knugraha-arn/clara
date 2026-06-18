@@ -64,20 +64,26 @@ export async function GET(request: NextRequest) {
     uploader_name: profileMap[doc.user_id] || "Unknown",
   }));
 
-  // Active categories — hanya dari dokumen yang user boleh lihat
+  // Active categories + count — hanya dari dokumen yang user boleh lihat
   let activeCategories: string[] = [];
+  let categoryCounts: Record<string, number> = {};
   if (page === 1 && (!category || category === "all")) {
     const { data: catData } = await supabase
       .from("documents")
       .select("category")
       .eq("status", "ready")
       .in("classification", classifications);
-    activeCategories = [...new Set((catData || []).map((d: { category: string }) => d.category))];
+    const cats = catData || [];
+    activeCategories = [...new Set(cats.map((d: { category: string }) => d.category))];
+    cats.forEach((d: { category: string }) => {
+      categoryCounts[d.category] = (categoryCounts[d.category] || 0) + 1;
+    });
   }
 
   return NextResponse.json({
     documents: documentsWithUploader,
     activeCategories,
+    categoryCounts,
     total: count ?? 0,
     page,
     pageSize,
