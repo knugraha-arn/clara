@@ -117,16 +117,12 @@ export async function DELETE(request: NextRequest) {
 
   if (!doc) return NextResponse.json({ error: "Dokumen tidak ditemukan" }, { status: 404 });
 
-  console.log("[DELETE document debug]", { requestedBy: user.id, role, targetDocOwner: doc.user_id, docId: id });
-
   await adminSupabase.storage.from("documents").remove([doc.file_path]);
-  const { error, count, data: deletedRows } = await adminSupabase
+  const { error, data: deletedRows } = await adminSupabase
     .from("documents")
-    .delete({ count: "exact" })
+    .delete()
     .eq("id", id)
     .select();
-
-  console.log("[DELETE document result]", { error, count, deletedRowsLength: deletedRows?.length });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!deletedRows || deletedRows.length === 0) {
