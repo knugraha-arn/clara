@@ -95,10 +95,22 @@ export default function ConfigPage() {
     if (selected.size === 0 || !deleteReason.trim()) return;
     setDeleting(true);
     try {
-      await Promise.all(
-        [...selected].map(id => fetch(`/api/documents?id=${id}`, { method: "DELETE" }))
+      const ids = [...selected];
+      const results = await Promise.all(
+        ids.map(id => fetch(`/api/documents?id=${id}`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: deleteReason.trim() }),
+        }))
       );
-      toastSuccess(`${selected.size} dokumen berhasil dihapus.`);
+      const failedCount = results.filter(r => !r.ok).length;
+      if (failedCount === 0) {
+        toastSuccess(`${ids.length} dokumen berhasil dihapus.`);
+      } else if (failedCount < ids.length) {
+        toastError(`${ids.length - failedCount} dokumen terhapus, ${failedCount} gagal dihapus.`);
+      } else {
+        toastError("Gagal menghapus dokumen.");
+      }
     } catch {
       toastError("Gagal menghapus sebagian dokumen.");
     } finally {
