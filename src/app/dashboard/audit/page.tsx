@@ -8,13 +8,20 @@ import { SkeletonPage } from "@/components/ui/Skeleton";
 import type { DocumentLog, AuditEventType } from "@/types";
 
 const EVENT_CONFIG: Record<AuditEventType, { label: string; color: string; bg: string; icon: string }> = {
-  uploaded:               { label: "Upload",            color: "#0344D8", bg: "#EEF2FF", icon: "⬆️" },
-  viewed:                 { label: "Dilihat",           color: "#6B7280", bg: "#F3F4F6", icon: "👁️" },
-  downloaded:             { label: "Download",          color: "#16A34A", bg: "#F0FDF4", icon: "⬇️" },
-  deleted:                { label: "Dihapus",           color: "#DC2626", bg: "#FEF2F2", icon: "🗑️" },
-  searched:               { label: "Dicari",            color: "#9333EA", bg: "#FDF4FF", icon: "🔍" },
-  classification_changed: { label: "Klasifikasi Diubah",color: "#D97706", bg: "#FFFBEB", icon: "🏷️" },
-  role_changed:           { label: "Role Diubah",       color: "#0891B2", bg: "#ECFEFF", icon: "👤" },
+  uploaded:                    { label: "Upload",              color: "#0344D8", bg: "#EEF2FF", icon: "⬆️" },
+  viewed:                      { label: "Dilihat",             color: "#6B7280", bg: "#F3F4F6", icon: "👁️" },
+  downloaded:                  { label: "Download",            color: "#16A34A", bg: "#F0FDF4", icon: "⬇️" },
+  deleted:                     { label: "Dihapus",             color: "#DC2626", bg: "#FEF2F2", icon: "🗑️" },
+  searched:                    { label: "Dicari",               color: "#9333EA", bg: "#FDF4FF", icon: "🔍" },
+  classification_changed:      { label: "Klasifikasi Diubah",  color: "#D97706", bg: "#FFFBEB", icon: "🏷️" },
+  role_changed:                { label: "Role Diubah",         color: "#0891B2", bg: "#ECFEFF", icon: "👤" },
+  number_approved:             { label: "Nomor Disetujui",     color: "#16A34A", bg: "#F0FDF4", icon: "✅" },
+  number_revision_requested:   { label: "Nomor Revisi Diminta",color: "#D97706", bg: "#FFFBEB", icon: "✏️" },
+  number_rejected:             { label: "Nomor Ditolak",       color: "#DC2626", bg: "#FEF2F2", icon: "❌" },
+  number_voided:               { label: "Nomor Di-void",       color: "#DC2626", bg: "#FEF2F2", icon: "⛔" },
+  number_resubmitted:          { label: "Nomor Diajukan Ulang",color: "#0891B2", bg: "#ECFEFF", icon: "🔁" },
+  number_linked:               { label: "Nomor Ditautkan",     color: "#0344D8", bg: "#EEF2FF", icon: "🔗" },
+  number_description_edited:   { label: "Deskripsi Nomor Diubah", color: "#6B7280", bg: "#F3F4F6", icon: "📝" },
 };
 
 async function generateAuditPDF(logs: DocumentLog[], eventFilter: string) {
@@ -49,6 +56,20 @@ async function generateAuditPDF(logs: DocumentLog[], eventFilter: string) {
         detail = String(log.metadata?.action || `${log.metadata?.from_role} → ${log.metadata?.to_role}`);
       } else if (log.event_type === "deleted") {
         detail = String(log.metadata?.reason || (log.metadata?.deleted_by_role ? `oleh ${log.metadata.deleted_by_role}` : ""));
+      } else if (log.event_type === "number_approved" || log.event_type === "number_revision_requested") {
+        detail = String(log.metadata?.note || "");
+      } else if (log.event_type === "number_rejected") {
+        detail = String(log.metadata?.note || "");
+        if (Number(log.metadata?.renumbered_count) > 0) detail += ` (${log.metadata?.renumbered_count} nomor lain digeser)`;
+      } else if (log.event_type === "number_voided") {
+        detail = String(log.metadata?.reason || "");
+        if (log.metadata?.was_linked_to_document) detail += " (sudah linked)";
+      } else if (log.event_type === "number_resubmitted") {
+        detail = "draft → pending";
+      } else if (log.event_type === "number_linked") {
+        detail = String(log.metadata?.number || "");
+      } else if (log.event_type === "number_description_edited") {
+        detail = `${log.metadata?.from} → ${log.metadata?.to}`;
       }
       return [
         formatDateTime(log.created_at),
@@ -217,6 +238,20 @@ export default function AuditPage() {
                 detail = String(log.metadata?.classification || "");
               } else if (log.event_type === "deleted") {
                 detail = String(log.metadata?.reason || (log.metadata?.deleted_by_role ? `oleh ${log.metadata.deleted_by_role}` : ""));
+              } else if (log.event_type === "number_approved" || log.event_type === "number_revision_requested") {
+                detail = String(log.metadata?.note || "");
+              } else if (log.event_type === "number_rejected") {
+                detail = String(log.metadata?.note || "");
+                if (Number(log.metadata?.renumbered_count) > 0) detail += ` (${log.metadata?.renumbered_count} nomor lain digeser)`;
+              } else if (log.event_type === "number_voided") {
+                detail = String(log.metadata?.reason || "");
+                if (log.metadata?.was_linked_to_document) detail += " (sudah linked)";
+              } else if (log.event_type === "number_resubmitted") {
+                detail = "draft → pending";
+              } else if (log.event_type === "number_linked") {
+                detail = String(log.metadata?.number || "");
+              } else if (log.event_type === "number_description_edited") {
+                detail = `${log.metadata?.from} → ${log.metadata?.to}`;
               }
 
               return (

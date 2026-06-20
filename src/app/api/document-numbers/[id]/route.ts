@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { logEvent } from "@/lib/audit";
 
 const ROMAN = ["","I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"];
 
@@ -27,6 +28,7 @@ export async function PATCH(
 
   const isAdmin = ["admin", "super_admin"].includes(profile?.role || "");
   const isOwner = docNum.created_by === user.id;
+  const docNumLabel = `${docNum.number} — ${docNum.description}`;
 
   const now = new Date().toISOString();
 
@@ -49,6 +51,17 @@ export async function PATCH(
       updated_at: now,
     }).eq("id", id);
 
+    await logEvent({
+      supabase: adminSupabase,
+      documentTitle: docNumLabel,
+      userId: user.id,
+      userEmail: user.email || "",
+      userName: profile?.full_name || undefined,
+      eventType: "number_approved",
+      metadata: { number_id: id, number: docNum.number, note },
+      request,
+    });
+
     return NextResponse.json({ success: true });
   }
 
@@ -67,6 +80,17 @@ export async function PATCH(
       review_note: note,
       updated_at: now,
     }).eq("id", id);
+
+    await logEvent({
+      supabase: adminSupabase,
+      documentTitle: docNumLabel,
+      userId: user.id,
+      userEmail: user.email || "",
+      userName: profile?.full_name || undefined,
+      eventType: "number_revision_requested",
+      metadata: { number_id: id, number: docNum.number, note },
+      request,
+    });
 
     return NextResponse.json({ success: true });
   }
@@ -107,6 +131,23 @@ export async function PATCH(
       updated_at: now,
     }).eq("id", id);
 
+    await logEvent({
+      supabase: adminSupabase,
+      documentTitle: docNumLabel,
+      userId: user.id,
+      userEmail: user.email || "",
+      userName: profile?.full_name || undefined,
+      eventType: "number_rejected",
+      metadata: {
+        number_id: id,
+        number: docNum.number,
+        note,
+        renumbered_count: afterNums?.length || 0,
+        renumbered_ids: afterNums?.map(n => n.id) || [],
+      },
+      request,
+    });
+
     return NextResponse.json({ success: true });
   }
 
@@ -125,6 +166,23 @@ export async function PATCH(
       updated_at: now,
     }).eq("id", id);
 
+    await logEvent({
+      supabase: adminSupabase,
+      documentTitle: docNumLabel,
+      userId: user.id,
+      userEmail: user.email || "",
+      userName: profile?.full_name || undefined,
+      eventType: "number_voided",
+      metadata: {
+        number_id: id,
+        number: docNum.number,
+        reason: note,
+        prior_status: docNum.status,
+        was_linked_to_document: docNum.document_id || null,
+      },
+      request,
+    });
+
     return NextResponse.json({ success: true });
   }
 
@@ -137,6 +195,21 @@ export async function PATCH(
       status: "pending",
       updated_at: now,
     }).eq("id", id);
+
+    await logEvent({
+      supabase: adminSupabase,
+      documentTitle: docNumLabel,
+      userId: user.id,
+      userEmail: user.email || "",
+      userName: profile?.full_name || undefined,
+      eventType: "number_resubmitted",
+      metadata: {
+        number_id: id,
+        number: docNum.number,
+        prior_revision_note: docNum.review_note || null,
+      },
+      request,
+    });
 
     return NextResponse.json({ success: true });
   }
@@ -152,6 +225,18 @@ export async function PATCH(
       updated_at: now,
     }).eq("id", id);
 
+    await logEvent({
+      supabase: adminSupabase,
+      documentId,
+      documentTitle: docNumLabel,
+      userId: user.id,
+      userEmail: user.email || "",
+      userName: profile?.full_name || undefined,
+      eventType: "number_linked",
+      metadata: { number_id: id, number: docNum.number },
+      request,
+    });
+
     return NextResponse.json({ success: true });
   }
 
@@ -160,10 +245,26 @@ export async function PATCH(
     if (!isOwner && !isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     if (docNum.status === "linked") return NextResponse.json({ error: "Tidak bisa edit nomor yang sudah linked" }, { status: 400 });
 
+    const oldDescription = docNum.description;
+    const newDescription = description || docNum.description;
+
     await supabase.from("document_numbers").update({
-      description: description || docNum.description,
+      description: newDescription,
       updated_at: now,
     }).eq("id", id);
+
+    if (newDescription !== oldDescription) {
+      await logEvent({
+        supabase: adminSupabase,
+        documentTitle: `${docNum.number} — ${newDescription}`,
+        userId: user.id,
+        userEmail: user.email || "",
+        userName: profile?.full_name || undefined,
+        eventType: "number_description_edited",
+        metadata: { number_id: id, number: docNum.number, from: oldDescription, to: newDescription },
+        request,
+      });
+    }
 
     return NextResponse.json({ success: true });
   }

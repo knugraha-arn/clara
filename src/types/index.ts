@@ -9,7 +9,10 @@ export type DocumentClassification = "public" | "internal" | "confidential" | "r
 export type RetentionPolicy = "standard" | "extended" | "permanent" | "custom";
 export type AuditEventType =
   | "uploaded" | "viewed" | "downloaded" | "deleted"
-  | "searched" | "classification_changed" | "role_changed";
+  | "searched" | "classification_changed" | "role_changed"
+  | "number_approved" | "number_revision_requested" | "number_rejected"
+  | "number_voided" | "number_resubmitted" | "number_linked"
+  | "number_description_edited";
 
 export interface Document {
   id: string;
