@@ -118,7 +118,7 @@ export async function DELETE(request: NextRequest) {
   if (!doc) return NextResponse.json({ error: "Dokumen tidak ditemukan" }, { status: 404 });
 
   await adminSupabase.storage.from("documents").remove([doc.file_path]);
-  const { error } = await supabase.from("documents").delete().eq("id", id);
+  const { error } = await adminSupabase.from("documents").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ success: true });
