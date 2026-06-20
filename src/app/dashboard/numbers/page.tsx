@@ -6,6 +6,7 @@ import { useRole } from "@/components/layout/DashboardShell";
 import { CLS_CFG, formatDateShort } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
 import { SkeletonPage } from "@/components/ui/Skeleton";
+import { createClient } from "@/lib/supabase/client";
 
 const formatDate = formatDateShort;
 
@@ -67,6 +68,31 @@ function ActionModal({ title, placeholder, onConfirm, onCancel, confirmLabel, co
   );
 }
 
+function EditDescriptionModal({ currentDescription, onConfirm, onCancel }:
+  { currentDescription: string; onConfirm: (newDescription: string) => void; onCancel: () => void }) {
+  const [value, setValue] = useState(currentDescription);
+  const canConfirm = value.trim().length > 0;
+  return (
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ backgroundColor: "white", borderRadius: 16, padding: 24, width: 440, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+        <p style={{ fontSize: 15, fontWeight: 700, color: "#1A1F2E", margin: "0 0 12px" }}>Edit Perihal / Uraian</p>
+        <textarea value={value} onChange={e => setValue(e.target.value)} placeholder="Perihal / uraian nomor surat" rows={3}
+          style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "9px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", resize: "none", boxSizing: "border-box" }} />
+        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+          <button onClick={() => onConfirm(value.trim())} disabled={!canConfirm}
+            style={{ flex: 1, backgroundColor: "#0344D8", color: "white", border: "none", borderRadius: 10, padding: "10px 0", fontSize: 13, fontWeight: 600, cursor: canConfirm ? "pointer" : "not-allowed", opacity: canConfirm ? 1 : 0.5, fontFamily: "inherit" }}>
+            Simpan
+          </button>
+          <button onClick={onCancel}
+            style={{ padding: "10px 20px", backgroundColor: "#F3F4F6", color: "#374151", border: "none", borderRadius: 10, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
+            Batal
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function NumbersPage() {
   const role = useRole();
   const canCreate = ["contributor", "admin", "super_admin"].includes(role);
@@ -83,6 +109,8 @@ export default function NumbersPage() {
   const [yearFilter, setYearFilter] = useState(new Date().getFullYear().toString());
   const [modal, setModal] = useState<{ type: string; id: string; title: string } | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [editTarget, setEditTarget] = useState<{ id: string; description: string } | null>(null);
 
   // Form state
   const [formPartyInput, setFormPartyInput] = useState("");
@@ -120,6 +148,13 @@ export default function NumbersPage() {
     });
   }, [fetchNumbers]);
 
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      setCurrentUserId(data.user?.id || null);
+    });
+  }, []);
+
   // Party autocomplete
   useEffect(() => {
     if (formPartyInput.length === 0) return;
@@ -146,6 +181,27 @@ export default function NumbersPage() {
       toastError("Gagal memproses aksi.");
     } finally {
       setModal(null);
+      await fetchNumbers();
+      setActionLoading(null);
+    }
+  };
+
+  const handleEditDescription = async (newDescription: string) => {
+    if (!editTarget) return;
+    const { id } = editTarget;
+    setActionLoading(id + "edit_description");
+    try {
+      const res = await fetch(`/api/document-numbers/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "edit_description", description: newDescription }),
+      });
+      if (!res.ok) throw new Error();
+      toastSuccess("Perihal nomor surat berhasil diubah.");
+    } catch {
+      toastError("Gagal mengubah perihal nomor surat.");
+    } finally {
+      setEditTarget(null);
       await fetchNumbers();
       setActionLoading(null);
     }
@@ -264,6 +320,14 @@ export default function NumbersPage() {
           consentLabel="Saya menyetujui dan bertanggung jawab atas approval backdated ini. Tindakan ini tercatat dalam audit trail sebagai persetujuan resmi saya."
           onConfirm={(note, consent) => handleAction(modal.id, modal.type, note, consent)}
           onCancel={() => setModal(null)}
+        />
+      )}
+
+      {editTarget && (
+        <EditDescriptionModal
+          currentDescription={editTarget.description}
+          onConfirm={handleEditDescription}
+          onCancel={() => setEditTarget(null)}
         />
       )}
 
@@ -611,6 +675,12 @@ export default function NumbersPage() {
                     {isOverdue && <p style={{ fontSize: 10, color: "#DC2626", margin: "3px 0 0" }}>⚠️ &gt;30 hari</p>}
                   </div>
                   <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    {num.status !== "linked" && (isAdmin || num.created_by === currentUserId) && (
+                      <button onClick={() => setEditTarget({ id: num.id, description: num.description })}
+                        style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #E5E7EB", backgroundColor: "white", color: "#6B7280", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                        ✏️ Edit
+                      </button>
+                    )}
                     {num.status === "draft" && (
                       <button onClick={() => handleAction(num.id, "resubmit")}
                         style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #C7D2FE", backgroundColor: "#EEF2FF", color: "#0344D8", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
