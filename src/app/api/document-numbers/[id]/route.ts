@@ -240,10 +240,12 @@ export async function PATCH(
     return NextResponse.json({ success: true });
   }
 
-  // EDIT DESCRIPTION (only for non-linked)
+  // EDIT DESCRIPTION (tidak untuk status final: linked, void, rejected)
   if (action === "edit_description") {
     if (!isOwner && !isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    if (docNum.status === "linked") return NextResponse.json({ error: "Tidak bisa edit nomor yang sudah linked" }, { status: 400 });
+    if (["linked", "void", "rejected"].includes(docNum.status)) {
+      return NextResponse.json({ error: "Tidak bisa edit nomor dengan status final (linked/void/rejected)" }, { status: 400 });
+    }
 
     const oldDescription = docNum.description;
     const newDescription = description || docNum.description;

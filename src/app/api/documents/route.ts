@@ -111,7 +111,6 @@ export async function DELETE(request: NextRequest) {
   if (!id) return NextResponse.json({ error: "ID diperlukan" }, { status: 400 });
   const reasonParam = searchParams.get("reason");
   const reason = reasonParam && reasonParam.trim() ? reasonParam.trim() : null;
-  console.log("[DELETE reason check]", { id, reasonParam, reason });
 
   const { data: doc } = await supabase
     .from("documents")

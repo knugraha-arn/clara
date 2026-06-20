@@ -676,7 +676,7 @@ export default function NumbersPage() {
                     {isOverdue && <p style={{ fontSize: 10, color: "#DC2626", margin: "3px 0 0" }}>⚠️ &gt;30 hari</p>}
                   </div>
                   <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                    {num.status !== "linked" && (isAdmin || num.created_by === currentUserId) && (
+                    {!["linked", "void", "rejected"].includes(num.status) && (isAdmin || num.created_by === currentUserId) && (
                       <button onClick={() => setEditTarget({ id: num.id, description: num.description })}
                         style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #E5E7EB", backgroundColor: "white", color: "#6B7280", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
                         ✏️ Edit
