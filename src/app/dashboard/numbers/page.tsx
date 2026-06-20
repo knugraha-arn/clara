@@ -243,7 +243,13 @@ export default function NumbersPage() {
 
   const handleExportCSV = () => {
     if (!numbers.length) return;
-    const headers = ["Nomor Surat", "Perihal", "Jenis", "Klasifikasi", "Pihak", "Tanggal", "Status", "Dibuat Oleh", "Direview Oleh", "Catatan Review", "Dibuat"];
+    const headers = [
+      "Nomor Surat", "Perihal", "Jenis", "Klasifikasi", "Pihak", "Tanggal", "Status",
+      "Backdated", "Dokumen Terlampir",
+      "Dibuat Oleh", "Disetujui Oleh", "Catatan Approval",
+      "Di-void Oleh", "Alasan Void",
+      "Dibuat Pada",
+    ];
     const rows = numbers.map(n => [
       n.number,
       `"${(n.description || "").replace(/"/g, '""')}"`,
@@ -252,9 +258,13 @@ export default function NumbersPage() {
       n.party_name,
       formatDate(n.date),
       n.status,
+      n.is_backdated ? "Ya" : "Tidak",
+      n.document_id ? "Ya" : "Tidak",
       n.created_by_name || "",
       n.reviewed_by_name || "",
-      `"${(n.review_note || "").replace(/"/g, '""')}"`,
+      `"${(n.approval_note || n.review_note || "").replace(/"/g, '""')}"`,
+      n.voided_by_name || "",
+      `"${(n.void_reason || "").replace(/"/g, '""')}"`,
       formatDate(n.created_at),
     ]);
     const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
@@ -658,6 +668,9 @@ export default function NumbersPage() {
                     {num.is_backdated && <span style={{ fontSize: 10, backgroundColor: "#FFFBEB", color: "#D97706", padding: "1px 5px", borderRadius: 4, fontWeight: 600 }}>Backdated</span>}
                     {num.review_note && ["draft", "rejected"].includes(num.status) && (
                       <p style={{ fontSize: 10, color: "#DC2626", margin: "3px 0 0", fontStyle: "italic" }}>💬 {num.review_note}</p>
+                    )}
+                    {num.void_reason && num.status === "void" && (
+                      <p style={{ fontSize: 10, color: "#9CA3AF", margin: "3px 0 0", fontStyle: "italic" }}>⛔ {num.void_reason}{num.voided_by_name ? ` — oleh ${num.voided_by_name}` : ""}</p>
                     )}
                   </div>
                   <div style={{ minWidth: 0 }}>
