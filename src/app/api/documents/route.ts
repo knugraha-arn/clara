@@ -110,6 +110,14 @@ export async function DELETE(request: NextRequest) {
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "ID diperlukan" }, { status: 400 });
 
+  let reason: string | null = null;
+  try {
+    const body = await request.json();
+    reason = typeof body?.reason === "string" && body.reason.trim() ? body.reason.trim() : null;
+  } catch {
+    // body kosong/tidak ada — tetap lanjut tanpa reason (backward compatible)
+  }
+
   const { data: doc } = await supabase
     .from("documents")
     .select("file_path, user_id, title")
@@ -143,6 +151,7 @@ export async function DELETE(request: NextRequest) {
       original_owner_id: doc.user_id,
       file_path: doc.file_path,
       deleted_by_role: role,
+      reason,
     },
     request,
   });

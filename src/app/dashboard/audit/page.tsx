@@ -48,7 +48,7 @@ async function generateAuditPDF(logs: DocumentLog[], eventFilter: string) {
       } else if (log.event_type === "role_changed") {
         detail = String(log.metadata?.action || `${log.metadata?.from_role} → ${log.metadata?.to_role}`);
       } else if (log.event_type === "deleted") {
-        detail = log.metadata?.deleted_by_role ? `oleh ${log.metadata.deleted_by_role}` : "";
+        detail = String(log.metadata?.reason || (log.metadata?.deleted_by_role ? `oleh ${log.metadata.deleted_by_role}` : ""));
       }
       return [
         formatDateTime(log.created_at),
@@ -216,7 +216,7 @@ export default function AuditPage() {
               } else if (log.event_type === "downloaded") {
                 detail = String(log.metadata?.classification || "");
               } else if (log.event_type === "deleted") {
-                detail = log.metadata?.deleted_by_role ? `oleh ${log.metadata.deleted_by_role}` : "";
+                detail = String(log.metadata?.reason || (log.metadata?.deleted_by_role ? `oleh ${log.metadata.deleted_by_role}` : ""));
               }
 
               return (
