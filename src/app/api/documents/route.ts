@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
 
   // Active categories + count — hanya dari dokumen yang user boleh lihat
   let activeCategories: string[] = [];
-  let categoryCounts: Record<string, number> = {};
+  const categoryCounts: Record<string, number> = {};
   if (page === 1 && (!category || category === "all")) {
     const { data: catData } = await supabase
       .from("documents")

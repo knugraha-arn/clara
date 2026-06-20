@@ -21,11 +21,6 @@ export async function GET() {
     return NextResponse.json({ error: error?.message || "Failed to fetch" }, { status: 500 });
   }
 
-  // Ambil last_sign_in_at dari auth.users via SQL langsung (tidak pakai admin.listUsers)
-  const { data: authData } = await adminSupabase
-    .from("profiles")
-    .select("id");
-
   // Coba ambil last_sign_in via RPC atau fallback ke null
   let lastSignInMap: Record<string, string | null> = {};
   try {

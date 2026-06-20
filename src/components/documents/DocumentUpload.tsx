@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { generateStoragePath, CATEGORY_LABELS } from "@/lib/utils";
+import { generateStoragePath } from "@/lib/utils";
 import { useCategories } from "@/lib/hooks/useCategories";
 import type { DocumentClassification } from "@/types";
 
@@ -53,14 +53,12 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
   const [duplicates, setDuplicates] = useState<DuplicateDoc[]>([]);
 
   const [showWarning, setShowWarning] = useState(false);
-  const [pendingNavCleanup, setPendingNavCleanup] = useState(false);
   const [issuedNumbers, setIssuedNumbers] = useState<{ id: string; number: string; description: string }[]>([]);
   const [selectedDocNumber, setSelectedDocNumber] = useState<string>("");
 
   // Party state
   const [parties, setParties] = useState<Party[]>([]);
   const [partyInput, setPartyInput] = useState("");
-  const [partyAbbrev, setPartyAbbrev] = useState("");
   const [partySuggestions, setPartySuggestions] = useState<{ id: string; name: string; doc_count: number }[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const partyInputRef = useRef<HTMLInputElement>(null);
@@ -85,21 +83,16 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
         fetch(`/api/documents?id=${aiSuggestion.documentId}`, { method: "DELETE" }).catch(() => {});
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage, aiSuggestion?.documentId]);
 
   // Fetch party suggestions — trigger dari 1 karakter
   useEffect(() => {
-    if (partyInput.length === 0) {
-      setPartySuggestions([]);
-      setShowSuggestions(false);
-      return;
-    }
-    setShowSuggestions(true); // show dropdown immediately
+    if (partyInput.length === 0) return;
     const timeout = setTimeout(async () => {
       const res = await fetch(`/api/parties?q=${encodeURIComponent(partyInput)}`);
       const data = await res.json();
       setPartySuggestions(data.parties || []);
+      setShowSuggestions(true);
     }, 150);
     return () => clearTimeout(timeout);
   }, [partyInput]);
@@ -463,7 +456,14 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
                     ref={partyInputRef}
                     type="text"
                     value={partyInput}
-                    onChange={(e) => setPartyInput(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setPartyInput(v);
+                      if (v.length === 0) {
+                        setPartySuggestions([]);
+                        setShowSuggestions(false);
+                      }
+                    }}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addParty(partyInput); } }}
                     onFocus={() => partyInput && setShowSuggestions(true)}
                     placeholder="Ketik nama pihak... (Enter untuk tambah)"

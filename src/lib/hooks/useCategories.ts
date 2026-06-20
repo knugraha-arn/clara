@@ -11,7 +11,7 @@ export function useCategories() {
   const [loading, setLoading] = useState(!cache);
 
   useEffect(() => {
-    if (cache) { setCategories(cache); setLoading(false); return; }
+    if (cache) return; // sudah di-set dari initial state di atas
     fetch("/api/categories")
       .then(r => r.json())
       .then(d => {

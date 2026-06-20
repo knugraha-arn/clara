@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useTransition } from "react";
 import { useRole } from "@/components/layout/DashboardShell";
 import { formatDateTime } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
@@ -90,14 +90,13 @@ export default function AuditPage() {
 
   const { error: toastError } = useToast();
   const [logs, setLogs] = useState<DocumentLog[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, startTransition] = useTransition();
   const [eventFilter, setEventFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [generatingPDF, setGeneratingPDF] = useState(false);
 
   const fetchLogs = useCallback(async () => {
     if (!canView) return;
-    setLoading(true);
     try {
       const url = eventFilter === "all" ? "/api/audit" : `/api/audit?event_type=${eventFilter}`;
       const res = await fetch(url);
@@ -106,12 +105,14 @@ export default function AuditPage() {
       setLogs(data.logs || []);
     } catch {
       toastError("Gagal memuat audit log.");
-    } finally {
-      setLoading(false);
     }
   }, [canView, eventFilter, toastError]);
 
-  useEffect(() => { fetchLogs(); }, [fetchLogs]);
+  useEffect(() => {
+    startTransition(async () => {
+      await fetchLogs();
+    });
+  }, [fetchLogs]);
 
   const handleDownloadPDF = async () => {
     setGeneratingPDF(true);

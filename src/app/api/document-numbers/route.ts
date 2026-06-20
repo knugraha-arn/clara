@@ -77,7 +77,6 @@ export async function POST(request: NextRequest) {
       // Buat party baru
       const { data: newParty } = await supabase.from("parties").insert({
         name: partyFullName.trim(),
-        name_lower: partyFullName.trim().toLowerCase(),
         abbreviation: partyAbbrev?.trim().toUpperCase() || null,
       }).select().single();
       if (newParty) resolvedPartyId = newParty.id;

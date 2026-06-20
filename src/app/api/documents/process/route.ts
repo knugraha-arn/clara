@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { analyzeDocumentPage1, generateEmbedding, chunkText } from "@/lib/openai";
-import { logEvent } from "@/lib/audit";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -16,8 +15,6 @@ export async function POST(request: NextRequest) {
 
     const { storagePath, fileName, fileSize, title, classificationOverride, overrideReason } = await request.json();
     if (!storagePath) return NextResponse.json({ error: "storagePath diperlukan" }, { status: 400 });
-
-    const { data: profile } = await supabase.from("profiles").select("full_name, role").eq("id", user.id).single();
 
     // 1. Create document record
     const { data: doc, error: docError } = await supabase

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useTransition } from "react";
 import { useRole } from "@/components/layout/DashboardShell";
 import { CATEGORY_LABELS, formatDateShort } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
@@ -50,12 +50,12 @@ export default function RegisterPage() {
 
   // Arsip tab state
   const [documents, setDocuments] = useState<MasterDocumentRegister[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, startArsipTransition] = useTransition();
   const [statusFilter, setStatusFilter] = useState("all");
 
   // Masa Berlaku tab state
   const [validityDocs, setValidityDocs] = useState<ValidityDoc[]>([]);
-  const [validityLoading, setValidityLoading] = useState(false);
+  const [validityLoading, startValidityTransition] = useTransition();
   const [validitySearch, setValiditySearch] = useState("");
   const [validityFilter, setValidityFilter] = useState<"all" | "30" | "90" | "custom">("all");
   const [showExpired, setShowExpired] = useState(false);
@@ -63,27 +63,26 @@ export default function RegisterPage() {
   const [customTo, setCustomTo] = useState("");
 
   // Fetch arsip
-  useEffect(() => {
-    const fetch_ = async () => {
-      setLoading(true);
-      try {
-        const url = statusFilter === "all" ? "/api/register" : `/api/register?status=${statusFilter}`;
-        const res = await fetch(url);
-        if (!res.ok) throw new Error();
-        const data = await res.json();
-        setDocuments(data.documents || []);
-      } catch {
-        toastError("Gagal memuat data register.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetch_();
+  const fetchArsip = useCallback(async () => {
+    try {
+      const url = statusFilter === "all" ? "/api/register" : `/api/register?status=${statusFilter}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setDocuments(data.documents || []);
+    } catch {
+      toastError("Gagal memuat data register.");
+    }
   }, [statusFilter, toastError]);
+
+  useEffect(() => {
+    startArsipTransition(async () => {
+      await fetchArsip();
+    });
+  }, [fetchArsip]);
 
   // Fetch masa berlaku
   const fetchValidity = useCallback(async () => {
-    setValidityLoading(true);
     try {
       const res = await fetch("/api/register/validity");
       if (!res.ok) throw new Error();
@@ -91,13 +90,15 @@ export default function RegisterPage() {
       setValidityDocs(json.data || []);
     } catch {
       toastError("Gagal memuat data masa berlaku.");
-    } finally {
-      setValidityLoading(false);
     }
   }, [toastError]);
 
   useEffect(() => {
-    if (activeTab === "masa_berlaku") fetchValidity();
+    if (activeTab === "masa_berlaku") {
+      startValidityTransition(async () => {
+        await fetchValidity();
+      });
+    }
   }, [activeTab, fetchValidity]);
 
   // Filter validity docs

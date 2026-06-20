@@ -57,7 +57,6 @@ export async function POST(
       .from("parties")
       .insert({
         name: name.trim(),
-        name_lower: name.trim().toLowerCase(),
         abbreviation: abbreviation?.trim().toUpperCase() || null,
       })
       .select()

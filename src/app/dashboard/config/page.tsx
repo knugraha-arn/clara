@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useRole } from "@/components/layout/DashboardShell";
 import Image from "next/image";
 import { formatDateShort, formatSize } from "@/lib/utils";
@@ -313,7 +313,7 @@ export default function ConfigPage() {
                 filteredDocs.map((doc, i) => {
                   const isSelected = selected.has(doc.id);
                   return (
-                    <div key={doc.id} onClick={() => { const s = new Set(selected); isSelected ? s.delete(doc.id) : s.add(doc.id); setSelected(s); }}
+                    <div key={doc.id} onClick={() => { const s = new Set(selected); if (isSelected) { s.delete(doc.id); } else { s.add(doc.id); } setSelected(s); }}
                       style={{ display: "grid", gridTemplateColumns: "40px 1fr 110px 110px 120px 80px", gap: 10, padding: "10px 16px", borderBottom: i < filteredDocs.length - 1 ? "1px solid #F5F5F5" : "none", backgroundColor: isSelected ? "#FEF2F2" : "white", cursor: "pointer", alignItems: "center" }}
                       onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = "#FAFBFF"; }}
                       onMouseLeave={e => e.currentTarget.style.backgroundColor = isSelected ? "#FEF2F2" : "white"}>

@@ -116,7 +116,7 @@ export default function SearchBar() {
                 <DocumentCard document={result.document} />
                 {result.snippet && (
                   <div className="mt-1 px-5 pb-3 -mt-2 bg-white rounded-b-xl border-x border-b border-gray-100">
-                    <p className="text-xs text-gray-400 italic line-clamp-2">"{result.snippet}"</p>
+                    <p className="text-xs text-gray-400 italic line-clamp-2">&quot;{result.snippet}&quot;</p>
                   </div>
                 )}
               </div>

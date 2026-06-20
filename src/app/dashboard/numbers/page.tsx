@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useTransition } from "react";
 import { useCategories } from "@/lib/hooks/useCategories";
 import { useRole } from "@/components/layout/DashboardShell";
 import { CLS_CFG, formatDateShort } from "@/lib/utils";
@@ -10,7 +10,6 @@ import { SkeletonPage } from "@/components/ui/Skeleton";
 const formatDate = formatDateShort;
 
 const ROMAN = ["","I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"];
-const MONTHS_ID = ["","Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 
 const STATUS_CFG: Record<string, { label: string; color: string; bg: string; icon: string }> = {
   draft:    { label: "Draft",    color: "#6B7280", bg: "#F3F4F6", icon: "✏️" },
@@ -74,10 +73,11 @@ export default function NumbersPage() {
   const { categories, labelMap: CAT_LABELS } = useCategories();
   const isAdmin = ["admin", "super_admin"].includes(role);
   const { success: toastSuccess, error: toastError } = useToast();
+  const [nowMs] = useState(() => Date.now());
 
   const [numbers, setNumbers] = useState<DocNumber[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [loading, startLoadingTransition] = useTransition();
   const [showForm, setShowForm] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
   const [yearFilter, setYearFilter] = useState(new Date().getFullYear().toString());
@@ -96,12 +96,10 @@ export default function NumbersPage() {
   const [formDescription, setFormDescription] = useState("");
   const [formBackdatedReason, setFormBackdatedReason] = useState("");
   const [formBackdatedConsent, setFormBackdatedConsent] = useState(false);
-  const [previewNumber, setPreviewNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const partyInputRef = useRef<HTMLInputElement>(null);
 
   const fetchNumbers = useCallback(async () => {
-    setLoading(true);
     try {
       const params = new URLSearchParams();
       if (statusFilter !== "all") params.set("status", statusFilter);
@@ -113,17 +111,18 @@ export default function NumbersPage() {
       setPendingCount(data.pendingCount || 0);
     } catch {
       toastError("Gagal memuat nomor surat.");
-    } finally {
-      setLoading(false);
     }
   }, [statusFilter, yearFilter, toastError]);
 
-  useEffect(() => { fetchNumbers(); }, [fetchNumbers]);
+  useEffect(() => {
+    startLoadingTransition(async () => {
+      await fetchNumbers();
+    });
+  }, [fetchNumbers]);
 
   // Party autocomplete
   useEffect(() => {
-    if (formPartyInput.length === 0) { setFormPartySuggestions([]); setShowPartySug(false); return; }
-    setShowPartySug(true);
+    if (formPartyInput.length === 0) return;
     const t = setTimeout(async () => {
       const res = await fetch(`/api/parties?q=${encodeURIComponent(formPartyInput)}`);
       const data = await res.json();
@@ -131,16 +130,6 @@ export default function NumbersPage() {
     }, 150);
     return () => clearTimeout(t);
   }, [formPartyInput]);
-
-  // Preview nomor — pakai abbreviation jika ada
-  useEffect(() => {
-    if (!formPartyInput.trim()) { setPreviewNumber(""); return; }
-    const d = new Date(formDate);
-    const month = d.getMonth() + 1;
-    const year = d.getFullYear();
-    const partyCode = formPartyAbbrev || formPartyInput.toUpperCase().slice(0, 4);
-    setPreviewNumber(`XXX/${partyCode}/${ROMAN[month]}/${year}`);
-  }, [formPartyInput, formPartyAbbrev, formDate]);
 
   const handleAction = async (id: string, action: string, note?: string, consent?: boolean) => {
     setActionLoading(id + action);
@@ -185,7 +174,7 @@ export default function NumbersPage() {
     const data = await res.json();
     if (res.ok) {
       setShowForm(false);
-      setFormPartyInput(""); setFormPartyId(null); setFormPartyAbbrev(""); setFormDescription(""); setPreviewNumber("");
+      setFormPartyInput(""); setFormPartyId(null); setFormPartyAbbrev(""); setFormDescription("");
       setFormDate(new Date().toISOString().split("T")[0]);
       setFormBackdatedReason(""); setFormBackdatedConsent(false);
       await fetchNumbers();
@@ -228,16 +217,26 @@ export default function NumbersPage() {
   const isBackdated = formDate < today;
   const pendingNumbers = numbers.filter(n => n.status === "pending");
 
+  // Preview nomor — pakai abbreviation jika ada (derived, bukan state)
+  const previewNumber = (() => {
+    if (!formPartyInput.trim()) return "";
+    const d = new Date(formDate);
+    const month = d.getMonth() + 1;
+    const year = d.getFullYear();
+    const partyCode = formPartyAbbrev || formPartyInput.toUpperCase().slice(0, 4);
+    return `XXX/${partyCode}/${ROMAN[month]}/${year}`;
+  })();
+
   // Alert: issued > 30 hari
   const overdueNumbers = numbers.filter(n => {
     if (n.status !== "issued") return false;
-    return (Date.now() - new Date(n.created_at).getTime()) / (1000 * 60 * 60 * 24) > 30;
+    return (nowMs - new Date(n.created_at).getTime()) / (1000 * 60 * 60 * 24) > 30;
   });
 
   // Alert: pending > 7 hari
   const stalePendingNumbers = numbers.filter(n => {
     if (n.status !== "pending") return false;
-    return (Date.now() - new Date(n.created_at).getTime()) / (1000 * 60 * 60 * 24) > 7;
+    return (nowMs - new Date(n.created_at).getTime()) / (1000 * 60 * 60 * 24) > 7;
   });
 
   const filteredNumbers = numbers;
@@ -348,7 +347,12 @@ export default function NumbersPage() {
               <div style={{ position: "relative" }}>
                 <label style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", display: "block", marginBottom: 4 }}>Pihak <span style={{ color: "#DC2626" }}>*</span></label>
                 <input ref={partyInputRef} type="text" value={formPartyInput}
-                  onChange={e => { setFormPartyInput(e.target.value); setFormPartyId(null); if (e.target.value.length > 0) setShowPartySug(true); }}
+                  onChange={e => {
+                    const v = e.target.value;
+                    setFormPartyInput(v);
+                    setFormPartyId(null);
+                    if (v.length > 0) { setShowPartySug(true); } else { setFormPartySuggestions([]); setShowPartySug(false); }
+                  }}
                   onFocus={() => { if (formPartyInput.length > 0) setShowPartySug(true); }}
                   placeholder="Ketik nama pihak..."
                   style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "8px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />
@@ -369,7 +373,7 @@ export default function NumbersPage() {
                     {!formPartySuggestions.some(s => s.name.toLowerCase() === formPartyInput.toLowerCase()) && (
                       <div onClick={() => setShowPartySug(false)}
                         style={{ padding: "8px 12px", cursor: "pointer", fontSize: 12, color: "#16A34A", fontWeight: 600, borderTop: "1px solid #F3F4F6" }}>
-                        + Pihak baru: "{formPartyInput.toUpperCase()}" — kode akan diminta
+                        + Pihak baru: &quot;{formPartyInput.toUpperCase()}&quot; — kode akan diminta
                       </div>
                     )}
                   </div>
@@ -438,7 +442,7 @@ export default function NumbersPage() {
                 style={{ flex: 1, backgroundColor: "#0344D8", color: "white", border: "none", borderRadius: 10, padding: "11px 0", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", opacity: (!formPartyInput.trim() || !formDescription.trim() || submitting || (isBackdated && (!formBackdatedReason.trim() || !formBackdatedConsent))) ? 0.5 : 1 }}>
                 {submitting ? "Membuat..." : isBackdated && role === "contributor" ? "Ajukan (Perlu Approval)" : "Buat Nomor Surat"}
               </button>
-              <button onClick={() => { setShowForm(false); setFormPartyInput(""); setFormDescription(""); setPreviewNumber(""); }}
+              <button onClick={() => { setShowForm(false); setFormPartyInput(""); setFormDescription(""); }}
                 style={{ padding: "11px 16px", backgroundColor: "#F3F4F6", color: "#6B7280", border: "none", borderRadius: 10, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
                 Batal
               </button>
@@ -452,7 +456,7 @@ export default function NumbersPage() {
             <p style={{ fontSize: 14, fontWeight: 700, color: "#D97706", margin: "0 0 14px" }}>⏳ Menunggu Approval ({pendingNumbers.length})</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {pendingNumbers.map(num => {
-                const daysPending = Math.floor((Date.now() - new Date(num.created_at).getTime()) / (1000 * 60 * 60 * 24));
+                const daysPending = Math.floor((nowMs - new Date(num.created_at).getTime()) / (1000 * 60 * 60 * 24));
                 return (
                   <div key={num.id} style={{ backgroundColor: "white", border: `1px solid ${daysPending > 7 ? "#FECACA" : "#FDE68A"}`, borderRadius: 10, padding: "12px 16px" }}>
                     <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
@@ -531,7 +535,7 @@ export default function NumbersPage() {
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {filteredNumbers.filter(n => !n.document_id).map(n => {
-                  const daysSince = Math.floor((Date.now() - new Date(n.created_at).getTime()) / (1000 * 60 * 60 * 24));
+                  const daysSince = Math.floor((nowMs - new Date(n.created_at).getTime()) / (1000 * 60 * 60 * 24));
                   return (
                     <div key={n.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "white", border: "1px solid #FECACA", borderRadius: 8, padding: "8px 12px" }}>
                       <div>
@@ -575,7 +579,7 @@ export default function NumbersPage() {
             filteredNumbers.map((num, i) => {
               const stsCfg = STATUS_CFG[num.status] || STATUS_CFG.draft;
               const clsCfg = CLS_CFG[num.classification] || CLS_CFG.internal;
-              const isOverdue = num.status === "issued" && (Date.now() - new Date(num.created_at).getTime()) / (1000 * 60 * 60 * 24) > 30;
+              const isOverdue = num.status === "issued" && (nowMs - new Date(num.created_at).getTime()) / (1000 * 60 * 60 * 24) > 30;
 
               return (
                 <div key={num.id}

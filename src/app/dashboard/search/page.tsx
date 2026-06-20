@@ -192,7 +192,7 @@ export default function SearchPage() {
                     </div>
                     <div style={{ backgroundColor: "rgba(255,255,255,0.08)", borderRadius: 8, padding: "8px 10px" }}>
                       <p style={{ fontSize: 12, fontWeight: 600, color: "#818CF8", margin: "0 0 2px" }}>✨ Semantic Search</p>
-                      <p style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", margin: 0, lineHeight: 1.4 }}>Temukan dokumen berdasarkan makna. Cari "perjanjian rahasia" bisa return dokumen NDA meski kata-katanya berbeda</p>
+                      <p style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", margin: 0, lineHeight: 1.4 }}>Temukan dokumen berdasarkan makna. Cari &quot;perjanjian rahasia&quot; bisa return dokumen NDA meski kata-katanya berbeda</p>
                     </div>
                   </div>
                   <p style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", margin: "10px 0 0" }}>Hasil disesuaikan dengan hak akses kamu</p>
@@ -248,7 +248,7 @@ export default function SearchPage() {
                             <p style={{ fontSize: 13, fontWeight: 600, color: "#1A1F2E", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.title}</p>
                             <span style={{ fontSize: 10, fontWeight: 600, backgroundColor: result.match_type === "semantic" ? "#EEF2FF" : "#F0FDF4", color: result.match_type === "semantic" ? "#0344D8" : "#16A34A", padding: "1px 5px", borderRadius: 4, flexShrink: 0 }}>{result.match_type}</span>
                           </div>
-                          {result.snippet && <p style={{ fontSize: 11, color: "#9CA3AF", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontStyle: "italic" }}>"{result.snippet.slice(0, 100)}..."</p>}
+                          {result.snippet && <p style={{ fontSize: 11, color: "#9CA3AF", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontStyle: "italic" }}>&quot;{result.snippet.slice(0, 100)}...&quot;</p>}
                         </div>
                         <div><span style={{ fontSize: 10, fontWeight: 600, backgroundColor: clsStyle.bg, color: clsStyle.color, padding: "2px 6px", borderRadius: 4 }}>{clsStyle.label}</span></div>
                         <div><span style={{ fontSize: 10, fontWeight: 600, backgroundColor: catStyle.bg, color: catStyle.color, padding: "2px 6px", borderRadius: 4 }}>{CATEGORY_LABELS[doc.category as DocumentCategory] || doc.category}</span></div>

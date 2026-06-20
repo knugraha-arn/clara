@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useTransition } from "react";
 import { useRole } from "@/components/layout/DashboardShell";
 import { CATEGORY_LABELS, CLS_CFG, formatDateShort, formatSize } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
@@ -17,7 +17,7 @@ export default function AdminPage() {
 
   const { success: toastSuccess, error: toastError } = useToast();
   const [documents, setDocuments] = useState<DocWithUploader[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, startTransition] = useTransition();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
   const [search, setSearch] = useState("");
@@ -25,7 +25,6 @@ export default function AdminPage() {
   const [showConfirm, setShowConfirm] = useState(false);
 
   const fetchDocuments = useCallback(async () => {
-    setLoading(true);
     try {
       const res = await fetch("/api/documents?limit=200");
       if (!res.ok) throw new Error();
@@ -33,12 +32,21 @@ export default function AdminPage() {
       setDocuments(data.documents || []);
     } catch {
       toastError("Gagal memuat daftar dokumen.");
-    } finally {
-      setLoading(false);
     }
   }, [toastError]);
 
-  useEffect(() => { if (canAccess) fetchDocuments(); }, [canAccess, fetchDocuments]);
+  const refetchDocuments = useCallback(() => {
+    startTransition(async () => {
+      await fetchDocuments();
+    });
+  }, [fetchDocuments]);
+
+  useEffect(() => {
+    if (!canAccess) return;
+    startTransition(async () => {
+      await fetchDocuments();
+    });
+  }, [canAccess, fetchDocuments]);
 
   const toggleSelect = (id: string) => {
     setSelected(prev => {
@@ -70,7 +78,7 @@ export default function AdminPage() {
       setSelected(new Set());
       setDeleteReason("");
       setShowConfirm(false);
-      await fetchDocuments();
+      refetchDocuments();
       setDeleting(false);
     }
   };

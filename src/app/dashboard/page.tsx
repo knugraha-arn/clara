@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import DocumentUpload from "@/components/documents/DocumentUpload";
@@ -19,16 +19,28 @@ const PAGE_SIZE_OPTIONS = [10, 20, 30];
 
 interface DocWithUploader extends Document { uploader_name?: string; }
 
+function ColHeader({ label, col, sortKey, sortDir, onSort }: {
+  label: string; col: SortKey; sortKey: SortKey; sortDir: SortDir; onSort: (col: SortKey) => void;
+}) {
+  return (
+    <span onClick={() => onSort(col)}
+      style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 3 }}>
+      {label}
+      <span style={{ opacity: sortKey === col ? 1 : 0.3, fontSize: 10 }}>
+        {sortKey === col ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
+      </span>
+    </span>
+  );
+}
+
 export default function DashboardPage() {
   const role = useRole();
   const { error: toastError } = useToast();
   const canUpload = ["contributor", "admin", "super_admin"].includes(role);
   const [documents, setDocuments] = useState<DocWithUploader[]>([]);
-  const [activeCategories, setActiveCategories] = useState<DocumentCategory[]>([]);
-  const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [loading, setLoading] = useState(true);
+  const [loading, startTransition] = useTransition();
   const [showUpload, setShowUpload] = useState(false);
   const [activeCategory, setActiveCategory] = useState("all");
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
@@ -42,7 +54,6 @@ export default function DashboardPage() {
   const fetchDocuments = useCallback(async (
     cat = "all", p = 1, size = 10, sort: SortKey = "created_at", dir: SortDir = "desc"
   ) => {
-    setLoading(true);
     try {
       const params = new URLSearchParams({
         page: String(p),
@@ -57,67 +68,59 @@ export default function DashboardPage() {
       setDocuments(data.documents || []);
       setTotal(data.total ?? 0);
       setTotalPages(data.totalPages ?? 1);
-      if (p === 1 && cat === "all") {
-        setActiveCategories(data.activeCategories || []);
-        setCategoryCounts(data.categoryCounts || {});
-      }
     } catch {
       toastError("Gagal memuat dokumen. Coba refresh halaman.");
-    } finally {
-      setLoading(false);
     }
   }, [toastError]);
 
-  useEffect(() => { fetchDocuments("all", 1, pageSize, sortKey, sortDir); }, [fetchDocuments, pageSize, sortKey, sortDir]);
+  useEffect(() => {
+    startTransition(async () => {
+      await fetchDocuments("all", 1, pageSize, sortKey, sortDir);
+    });
+  }, [fetchDocuments, pageSize, sortKey, sortDir]);
 
   // Handle redirect dari halaman Nomor Surat
+  const [, startParamSync] = useTransition();
+
   useEffect(() => {
     const shouldUpload = searchParams.get("upload");
     const numberId = searchParams.get("number_id");
     const numberStr = searchParams.get("number");
     if (shouldUpload === "1" && numberId && numberStr) {
-      setPreSelectedNumber({ id: numberId, number: decodeURIComponent(numberStr) });
-      setShowUpload(true);
+      startParamSync(() => {
+        setPreSelectedNumber({ id: numberId, number: decodeURIComponent(numberStr) });
+        setShowUpload(true);
+      });
     }
   }, [searchParams]);
-
-  const handleCategoryClick = (cat: string) => {
-    setActiveCategory(cat);
-    setPage(1);
-    fetchDocuments(cat, 1, pageSize, sortKey, sortDir);
-  };
 
   const handleSort = (key: SortKey) => {
     const newDir: SortDir = sortKey === key ? (sortDir === "asc" ? "desc" : "asc") : "asc";
     setSortKey(key);
     setSortDir(newDir);
     setPage(1);
-    fetchDocuments(activeCategory, 1, pageSize, key, newDir);
+    startTransition(async () => {
+      await fetchDocuments(activeCategory, 1, pageSize, key, newDir);
+    });
   };
 
   const handlePageChange = (p: number) => {
     setPage(p);
-    fetchDocuments(activeCategory, p, pageSize, sortKey, sortDir);
+    startTransition(async () => {
+      await fetchDocuments(activeCategory, p, pageSize, sortKey, sortDir);
+    });
   };
 
   const handlePageSizeChange = (size: number) => {
     setPageSize(size);
     setPage(1);
-    fetchDocuments(activeCategory, 1, size, sortKey, sortDir);
+    startTransition(async () => {
+      await fetchDocuments(activeCategory, 1, size, sortKey, sortDir);
+    });
   };
 
   const paginated = documents; // sudah dipaginasi dari server
   const today = new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(new Date());
-
-  const ColHeader = ({ label, col }: { label: string; col: SortKey }) => (
-    <span onClick={() => handleSort(col)}
-      style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 3 }}>
-      {label}
-      <span style={{ opacity: sortKey === col ? 1 : 0.3, fontSize: 10 }}>
-        {sortKey === col ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
-      </span>
-    </span>
-  );
 
   return (
     <>
@@ -161,7 +164,7 @@ export default function DashboardPage() {
                 </div>
               )}
               <DocumentUpload
-                onSuccess={() => { setShowUpload(false); setPreSelectedNumber(null); fetchDocuments("all"); setActiveCategory("all"); setPage(1); }}
+                onSuccess={() => { setShowUpload(false); setPreSelectedNumber(null); startTransition(async () => { await fetchDocuments("all"); }); setActiveCategory("all"); setPage(1); }}
                 preSelectedNumberId={preSelectedNumber?.id}
               />
             </div>
@@ -198,12 +201,12 @@ export default function DashboardPage() {
           <div style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 14, overflow: "hidden" }}>
             {/* Header */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 120px 90px 70px", gap: 10, padding: "10px 16px", borderBottom: "1px solid #F5F5F5", backgroundColor: "#FAFAFA" }}>
-              <ColHeader label="Dokumen" col="title" />
-              <ColHeader label="Klasifikasi" col="classification" />
-              <ColHeader label="Kategori" col="category" />
+              <ColHeader label="Dokumen" col="title" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <ColHeader label="Klasifikasi" col="classification" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <ColHeader label="Kategori" col="category" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <span style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em" }}>Diupload oleh</span>
-              <ColHeader label="Tgl Upload" col="created_at" />
-              <ColHeader label="Ukuran" col="file_size" />
+              <ColHeader label="Tgl Upload" col="created_at" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <ColHeader label="Ukuran" col="file_size" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             </div>
 
             {loading ? (

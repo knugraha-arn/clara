@@ -19,11 +19,13 @@ export default function DocumentSidePanel({ document: doc, uploaderName, onClose
   const [parties, setParties] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
-    if (!doc) { setParties([]); return; }
+    if (!doc) return;
+    let cancelled = false;
     fetch(`/api/documents/${doc.id}/parties`)
       .then(r => r.json())
-      .then(d => setParties(d.parties || []));
-  }, [doc?.id]);
+      .then(d => { if (!cancelled) setParties(d.parties || []); });
+    return () => { cancelled = true; };
+  }, [doc]);
 
   const handlePreview = useCallback(async () => {
     if (!doc) return;
