@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { logEvent } from "@/lib/audit";
 
 // Klasifikasi yang boleh dilihat per role
 function allowedClassifications(role: string): string[] {
@@ -99,7 +100,7 @@ export async function DELETE(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // Hanya contributor+ yang boleh delete
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const { data: profile } = await supabase.from("profiles").select("role, full_name").eq("id", user.id).single();
   const role = profile?.role || "viewer";
   if (!["contributor", "admin", "super_admin"].includes(role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -128,6 +129,23 @@ export async function DELETE(request: NextRequest) {
   if (!deletedRows || deletedRows.length === 0) {
     return NextResponse.json({ error: "Tidak ada baris yang terhapus (kemungkinan diblokir RLS atau dokumen sudah tidak ada)" }, { status: 500 });
   }
+
+  // documentId tidak di-set (dokumen sudah terhapus) — document_title tetap tersimpan untuk riwayat
+  await logEvent({
+    supabase: adminSupabase,
+    documentTitle: doc.title,
+    userId: user.id,
+    userEmail: user.email || "",
+    userName: profile?.full_name || undefined,
+    eventType: "deleted",
+    metadata: {
+      deleted_document_id: id,
+      original_owner_id: doc.user_id,
+      file_path: doc.file_path,
+      deleted_by_role: role,
+    },
+    request,
+  });
 
   return NextResponse.json({ success: true });
 }
