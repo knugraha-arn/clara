@@ -117,9 +117,21 @@ export async function DELETE(request: NextRequest) {
 
   if (!doc) return NextResponse.json({ error: "Dokumen tidak ditemukan" }, { status: 404 });
 
+  console.log("[DELETE document debug]", { requestedBy: user.id, role, targetDocOwner: doc.user_id, docId: id });
+
   await adminSupabase.storage.from("documents").remove([doc.file_path]);
-  const { error } = await adminSupabase.from("documents").delete().eq("id", id);
+  const { error, count, data: deletedRows } = await adminSupabase
+    .from("documents")
+    .delete({ count: "exact" })
+    .eq("id", id)
+    .select();
+
+  console.log("[DELETE document result]", { error, count, deletedRowsLength: deletedRows?.length });
+
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!deletedRows || deletedRows.length === 0) {
+    return NextResponse.json({ error: "Tidak ada baris yang terhapus (kemungkinan diblokir RLS atau dokumen sudah tidak ada)" }, { status: 500 });
+  }
 
   return NextResponse.json({ success: true });
 }
