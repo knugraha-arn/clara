@@ -35,20 +35,20 @@ interface DocNumber {
 
 interface Party { id: string; name: string; doc_count: number; abbreviation: string; }
 
-function ActionModal({ title, placeholder, onConfirm, onCancel, confirmLabel, confirmColor, requireConsent, consentLabel }:
-  { title: string; placeholder: string; onConfirm: (note: string, consent: boolean) => void; onCancel: () => void; confirmLabel: string; confirmColor: string; requireConsent?: boolean; consentLabel?: string }) {
+function ActionModal({ title, placeholder, onConfirm, onCancel, confirmLabel, confirmColor, requireConsent, consentLabel, submitting }:
+  { title: string; placeholder: string; onConfirm: (note: string, consent: boolean) => void; onCancel: () => void; confirmLabel: string; confirmColor: string; requireConsent?: boolean; consentLabel?: string; submitting?: boolean }) {
   const [note, setNote] = useState("");
   const [consent, setConsent] = useState(false);
-  const canConfirm = note.trim() && (!requireConsent || consent);
+  const canConfirm = note.trim() && (!requireConsent || consent) && !submitting;
   return (
     <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ backgroundColor: "white", borderRadius: 16, padding: 24, width: 440, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
         <p style={{ fontSize: 15, fontWeight: 700, color: "#1A1F2E", margin: "0 0 12px" }}>{title}</p>
-        <textarea value={note} onChange={e => setNote(e.target.value)} placeholder={placeholder} rows={3}
+        <textarea value={note} onChange={e => setNote(e.target.value)} placeholder={placeholder} rows={3} disabled={submitting}
           style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "9px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", resize: "none", boxSizing: "border-box" }} />
         {requireConsent && consentLabel && (
           <label style={{ display: "flex", alignItems: "flex-start", gap: 10, marginTop: 12, cursor: "pointer" }}>
-            <input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)}
+            <input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} disabled={submitting}
               style={{ marginTop: 2, width: 16, height: 16, flexShrink: 0, cursor: "pointer" }} />
             <span style={{ fontSize: 12, color: "#374151", lineHeight: 1.5 }}>{consentLabel}</span>
           </label>
@@ -56,10 +56,10 @@ function ActionModal({ title, placeholder, onConfirm, onCancel, confirmLabel, co
         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
           <button onClick={() => onConfirm(note, consent)} disabled={!canConfirm}
             style={{ flex: 1, backgroundColor: confirmColor, color: "white", border: "none", borderRadius: 10, padding: "10px 0", fontSize: 13, fontWeight: 600, cursor: canConfirm ? "pointer" : "not-allowed", opacity: canConfirm ? 1 : 0.5, fontFamily: "inherit" }}>
-            {confirmLabel}
+            {submitting ? "⏳ Memproses..." : confirmLabel}
           </button>
-          <button onClick={onCancel}
-            style={{ padding: "10px 20px", backgroundColor: "#F3F4F6", color: "#374151", border: "none", borderRadius: 10, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
+          <button onClick={onCancel} disabled={submitting}
+            style={{ padding: "10px 20px", backgroundColor: "#F3F4F6", color: "#374151", border: "none", borderRadius: 10, fontSize: 13, cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.5 : 1, fontFamily: "inherit" }}>
             Batal
           </button>
         </div>
@@ -320,6 +320,7 @@ export default function NumbersPage() {
           consentLabel="Saya menyetujui dan bertanggung jawab atas approval backdated ini. Tindakan ini tercatat dalam audit trail sebagai persetujuan resmi saya."
           onConfirm={(note, consent) => handleAction(modal.id, modal.type, note, consent)}
           onCancel={() => setModal(null)}
+          submitting={actionLoading === modal.id + modal.type}
         />
       )}
 

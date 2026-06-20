@@ -109,14 +109,9 @@ export async function DELETE(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "ID diperlukan" }, { status: 400 });
-
-  let reason: string | null = null;
-  try {
-    const body = await request.json();
-    reason = typeof body?.reason === "string" && body.reason.trim() ? body.reason.trim() : null;
-  } catch {
-    // body kosong/tidak ada — tetap lanjut tanpa reason (backward compatible)
-  }
+  const reasonParam = searchParams.get("reason");
+  const reason = reasonParam && reasonParam.trim() ? reasonParam.trim() : null;
+  console.log("[DELETE reason check]", { id, reasonParam, reason });
 
   const { data: doc } = await supabase
     .from("documents")

@@ -97,10 +97,8 @@ export default function ConfigPage() {
     try {
       const ids = [...selected];
       const results = await Promise.all(
-        ids.map(id => fetch(`/api/documents?id=${id}`, {
+        ids.map(id => fetch(`/api/documents?id=${id}&reason=${encodeURIComponent(deleteReason.trim())}`, {
           method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reason: deleteReason.trim() }),
         }))
       );
       const failedCount = results.filter(r => !r.ok).length;
