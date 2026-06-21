@@ -26,6 +26,10 @@ const EVENT_CONFIG: Record<AuditEventType, { label: string; color: string; bg: s
   number_description_edited:   { label: "Deskripsi Nomor Diubah", color: "#6B7280", bg: "#F3F4F6", icon: "📝" },
   party_created:                { label: "Pihak Dibuat",        color: "#0344D8", bg: "#EEF2FF", icon: "🏢" },
   party_unlinked:                { label: "Pihak Dilepas",       color: "#D97706", bg: "#FFFBEB", icon: "🔓" },
+  edit_requested:               { label: "Perubahan Diajukan",  color: "#D97706", bg: "#FFFBEB", icon: "📋" },
+  edit_approved:                { label: "Perubahan Disetujui", color: "#16A34A", bg: "#F0FDF4", icon: "✅" },
+  edit_rejected:                { label: "Perubahan Ditolak",   color: "#DC2626", bg: "#FEF2F2", icon: "❌" },
+  edit_auto_approved:           { label: "Perubahan Auto-Approved", color: "#0891B2", bg: "#ECFEFF", icon: "⚡" },
 };
 
 async function generateAuditPDF(logs: DocumentLog[], eventFilter: string) {
@@ -86,6 +90,11 @@ async function generateAuditPDF(logs: DocumentLog[], eventFilter: string) {
         detail = String(log.metadata?.abbreviation || "");
       } else if (log.event_type === "party_unlinked") {
         detail = String(log.metadata?.party_name || "");
+      } else if (log.event_type === "edit_requested" || log.event_type === "edit_auto_approved") {
+        const changes = log.metadata?.changes as Record<string, unknown> | undefined;
+        detail = changes ? Object.keys(changes).join(", ") : "";
+      } else if (log.event_type === "edit_approved" || log.event_type === "edit_rejected") {
+        detail = String(log.metadata?.note || "");
       }
       return [
         formatDateTime(log.created_at),
@@ -280,6 +289,11 @@ export default function AuditPage() {
                 detail = String(log.metadata?.abbreviation || "");
               } else if (log.event_type === "party_unlinked") {
                 detail = String(log.metadata?.party_name || "");
+              } else if (log.event_type === "edit_requested" || log.event_type === "edit_auto_approved") {
+                const changes = log.metadata?.changes as Record<string, unknown> | undefined;
+                detail = changes ? Object.keys(changes).join(", ") : "";
+              } else if (log.event_type === "edit_approved" || log.event_type === "edit_rejected") {
+                detail = String(log.metadata?.note || "");
               }
 
               return (

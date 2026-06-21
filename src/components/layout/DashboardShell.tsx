@@ -21,6 +21,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { href: "/dashboard",          icon: "📄", label: "Dokumen" },
   { href: "/dashboard/numbers",  icon: "📝", label: "Nomor Surat",   roles: ["auditor", "contributor", "admin", "super_admin"] },
+  { href: "/dashboard/edit-requests", icon: "📋", label: "Perubahan Dokumen", roles: ["contributor", "admin", "super_admin"] },
   { href: "/dashboard/search",   icon: "🔍", label: "Pencarian" },
   { href: "/dashboard/register", icon: "📒", label: "Doc Register",  roles: ["auditor", "admin", "super_admin"] },
   { href: "/dashboard/audit",    icon: "📋", label: "Audit Trail",   roles: ["auditor", "admin", "super_admin"] },

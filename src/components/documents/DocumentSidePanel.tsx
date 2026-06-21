@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { Document } from "@/types";
+import type { Document, DocumentCategory } from "@/types";
 import { CATEGORY_LABELS, CLS_CFG, formatDateTime, formatSize } from "@/lib/utils";
 import { useRole } from "@/components/layout/DashboardShell";
+import { useCategories } from "@/lib/hooks/useCategories";
+import { useToast } from "@/components/ui/Toast";
 
 const formatDate = formatDateTime;
 
@@ -13,10 +15,106 @@ interface DocumentSidePanelProps {
   onClose: () => void;
 }
 
+function RequestEditModal({ doc, categories, onSubmit, onCancel, submitting }: {
+  doc: Document;
+  categories: { id: string; label: string }[];
+  onSubmit: (fields: Record<string, unknown>, reason: string) => void;
+  onCancel: () => void;
+  submitting: boolean;
+}) {
+  const [title, setTitle] = useState(doc.title);
+  const [category, setCategory] = useState(doc.category);
+  const [summary, setSummary] = useState(doc.summary || "");
+  const [tagsInput, setTagsInput] = useState((doc.tags || []).join(", "));
+  const [validUntil, setValidUntil] = useState(doc.valid_until || "");
+  const [reason, setReason] = useState("");
+
+  const newTags = tagsInput.split(",").map(t => t.trim()).filter(Boolean);
+  const hasChanges =
+    title.trim() !== doc.title ||
+    category !== doc.category ||
+    summary.trim() !== (doc.summary || "") ||
+    JSON.stringify(newTags) !== JSON.stringify(doc.tags || []) ||
+    (validUntil || null) !== (doc.valid_until || null);
+
+  const canSubmit = hasChanges && reason.trim().length > 0 && !submitting;
+
+  const handleSubmit = () => {
+    if (!canSubmit) return;
+    const fields: Record<string, unknown> = {};
+    if (title.trim() !== doc.title) fields.title = title.trim();
+    if (category !== doc.category) fields.category = category;
+    if (summary.trim() !== (doc.summary || "")) fields.summary = summary.trim();
+    if (JSON.stringify(newTags) !== JSON.stringify(doc.tags || [])) fields.tags = newTags;
+    if ((validUntil || null) !== (doc.valid_until || null)) fields.valid_until = validUntil || null;
+    onSubmit(fields, reason.trim());
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ backgroundColor: "white", borderRadius: 16, padding: 24, width: 480, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+        <p style={{ fontSize: 15, fontWeight: 700, color: "#1A1F2E", margin: "0 0 4px" }}>Ajukan Perubahan Dokumen</p>
+        <p style={{ fontSize: 12, color: "#6B7280", margin: "0 0 18px" }}>Perubahan perlu disetujui sebelum diterapkan.</p>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Judul</label>
+            <input value={title} onChange={e => setTitle(e.target.value)} disabled={submitting}
+              style={{ width: "100%", marginTop: 6, border: "1px solid #E5E7EB", borderRadius: 8, padding: "9px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Kategori</label>
+            <select value={category} onChange={e => setCategory(e.target.value as DocumentCategory)} disabled={submitting}
+              style={{ width: "100%", marginTop: 6, border: "1px solid #E5E7EB", borderRadius: 8, padding: "9px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", backgroundColor: "white" }}>
+              {categories.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Ringkasan</label>
+            <textarea value={summary} onChange={e => setSummary(e.target.value)} rows={3} disabled={submitting}
+              style={{ width: "100%", marginTop: 6, border: "1px solid #E5E7EB", borderRadius: 8, padding: "9px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", resize: "none", boxSizing: "border-box" }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Tags (pisahkan koma)</label>
+            <input value={tagsInput} onChange={e => setTagsInput(e.target.value)} disabled={submitting}
+              style={{ width: "100%", marginTop: 6, border: "1px solid #E5E7EB", borderRadius: 8, padding: "9px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Berlaku Hingga</label>
+            <input type="date" value={validUntil} onChange={e => setValidUntil(e.target.value)} disabled={submitting}
+              style={{ width: "100%", marginTop: 6, border: "1px solid #E5E7EB", borderRadius: 8, padding: "9px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Alasan Perubahan *</label>
+            <textarea value={reason} onChange={e => setReason(e.target.value)} rows={2} placeholder="Jelaskan kenapa perubahan ini diperlukan" disabled={submitting}
+              style={{ width: "100%", marginTop: 6, border: "1px solid #E5E7EB", borderRadius: 8, padding: "9px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", resize: "none", boxSizing: "border-box" }} />
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
+          <button onClick={handleSubmit} disabled={!canSubmit}
+            style={{ flex: 1, backgroundColor: "#0344D8", color: "white", border: "none", borderRadius: 10, padding: "11px 0", fontSize: 13, fontWeight: 600, cursor: canSubmit ? "pointer" : "not-allowed", opacity: canSubmit ? 1 : 0.5, fontFamily: "inherit" }}>
+            {submitting ? "⏳ Mengirim..." : "Ajukan Perubahan"}
+          </button>
+          <button onClick={onCancel} disabled={submitting}
+            style={{ padding: "11px 20px", backgroundColor: "#F3F4F6", color: "#374151", border: "none", borderRadius: 10, fontSize: 13, cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.5 : 1, fontFamily: "inherit" }}>
+            Batal
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DocumentSidePanel({ document: doc, uploaderName, onClose }: DocumentSidePanelProps) {
   const role = useRole();
   const canDownload = role !== "viewer";
+  const canRequestEdit = ["contributor", "admin", "super_admin"].includes(role);
   const [parties, setParties] = useState<{ id: string; name: string }[]>([]);
+  const [showEditRequest, setShowEditRequest] = useState(false);
+  const [submittingEdit, setSubmittingEdit] = useState(false);
+  const { categories } = useCategories();
+  const { success: toastSuccess, error: toastError } = useToast();
 
   useEffect(() => {
     if (!doc) return;
@@ -44,6 +142,26 @@ export default function DocumentSidePanel({ document: doc, uploaderName, onClose
     a.click();
     window.document.body.removeChild(a);
   }, [doc]);
+
+  const handleSubmitEditRequest = async (fields: Record<string, unknown>, reason: string) => {
+    if (!doc) return;
+    setSubmittingEdit(true);
+    try {
+      const res = await fetch("/api/documents/edit-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId: doc.id, fields, reason }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal mengajukan perubahan");
+      toastSuccess(data.autoApproved ? "Perubahan langsung diterapkan." : "Perubahan diajukan, menunggu persetujuan.");
+      setShowEditRequest(false);
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : "Gagal mengajukan perubahan");
+    } finally {
+      setSubmittingEdit(false);
+    }
+  };
 
   // Close on Escape
   useEffect(() => {
@@ -216,20 +334,38 @@ export default function DocumentSidePanel({ document: doc, uploaderName, onClose
 
         {/* Footer actions */}
         {doc && (
-          <div style={{ padding: "16px 20px", borderTop: "1px solid #EFEFEF", display: "flex", gap: 8 }}>
-            <button onClick={handlePreview}
-              style={{ flex: canDownload ? 1 : undefined, width: canDownload ? undefined : "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "white", border: "1px solid #E5E7EB", borderRadius: 10, padding: "10px 0", fontSize: 13, fontWeight: 600, color: "#374151", cursor: "pointer", fontFamily: "inherit" }}>
-              👁️ Preview
-            </button>
-            {canDownload && (
-              <button onClick={handleDownload}
-                style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#0344D8", border: "none", borderRadius: 10, padding: "10px 0", fontSize: 13, fontWeight: 600, color: "white", cursor: "pointer", fontFamily: "inherit" }}>
-                ⬇️ Download
+          <div style={{ padding: "16px 20px", borderTop: "1px solid #EFEFEF", display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={handlePreview}
+                style={{ flex: canDownload ? 1 : undefined, width: canDownload ? undefined : "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "white", border: "1px solid #E5E7EB", borderRadius: 10, padding: "10px 0", fontSize: 13, fontWeight: 600, color: "#374151", cursor: "pointer", fontFamily: "inherit" }}>
+                👁️ Preview
+              </button>
+              {canDownload && (
+                <button onClick={handleDownload}
+                  style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#0344D8", border: "none", borderRadius: 10, padding: "10px 0", fontSize: 13, fontWeight: 600, color: "white", cursor: "pointer", fontFamily: "inherit" }}>
+                  ⬇️ Download
+                </button>
+              )}
+            </div>
+            {canRequestEdit && (
+              <button onClick={() => setShowEditRequest(true)}
+                style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "white", border: "1px solid #FDE68A", borderRadius: 10, padding: "9px 0", fontSize: 12.5, fontWeight: 600, color: "#D97706", cursor: "pointer", fontFamily: "inherit" }}>
+                ✏️ Ajukan Perubahan Detail
               </button>
             )}
           </div>
         )}
       </div>
+
+      {showEditRequest && doc && (
+        <RequestEditModal
+          doc={doc}
+          categories={categories}
+          submitting={submittingEdit}
+          onSubmit={handleSubmitEditRequest}
+          onCancel={() => setShowEditRequest(false)}
+        />
+      )}
     </>
   );
 }

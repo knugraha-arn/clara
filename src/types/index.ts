@@ -15,7 +15,8 @@ export type AuditEventType =
   | "number_approved" | "number_revision_requested" | "number_rejected"
   | "number_voided" | "number_resubmitted" | "number_linked"
   | "number_description_edited"
-  | "party_created" | "party_unlinked";
+  | "party_created" | "party_unlinked"
+  | "edit_requested" | "edit_approved" | "edit_rejected" | "edit_auto_approved";
 
 export interface Document {
   id: string;
@@ -47,6 +48,32 @@ export interface Document {
 
 export interface DocumentWithUploader extends Document {
   uploader_name: string;
+}
+
+export interface DocumentEditableFields {
+  title?: string;
+  category?: DocumentCategory;
+  summary?: string;
+  tags?: string[];
+  valid_until?: string | null;
+}
+
+export interface DocumentEditRequest {
+  id: string;
+  document_id: string;
+  requested_by: string;
+  requested_by_name: string | null;
+  requested_by_role: string | null;
+  requested_at: string;
+  changes: Record<string, { old: unknown; new: unknown }>;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  reviewed_by: string | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  auto_approved: boolean;
+  created_at: string;
 }
 
 export interface DocumentLog {
