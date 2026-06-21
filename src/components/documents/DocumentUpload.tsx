@@ -245,7 +245,7 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
 
       // Selalu panggil update-classification untuk simpan semua perubahan user
       // termasuk summary, valid_until, kategori, dan klasifikasi
-      await fetch("/api/documents/update-classification", {
+      const updateRes = await fetch("/api/documents/update-classification", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -257,23 +257,35 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
           overrideReason,
         }),
       });
+      if (!updateRes.ok) {
+        const errData = await updateRes.json().catch(() => ({}));
+        throw new Error(errData.error || "Gagal menyimpan klasifikasi dokumen");
+      }
 
       // Simpan parties
       for (const party of parties) {
-        await fetch(`/api/documents/${aiSuggestion.documentId}/parties`, {
+        const partyRes = await fetch(`/api/documents/${aiSuggestion.documentId}/parties`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: party.name, abbreviation: party.abbreviation }),
         });
+        if (!partyRes.ok) {
+          const errData = await partyRes.json().catch(() => ({}));
+          throw new Error(errData.error || `Gagal menyimpan pihak: ${party.name}`);
+        }
       }
 
       // Link ke nomor surat jika dipilih
       if (selectedDocNumber) {
-        await fetch(`/api/document-numbers/${selectedDocNumber}`, {
+        const linkRes = await fetch(`/api/document-numbers/${selectedDocNumber}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "link_document", documentId: aiSuggestion.documentId }),
         });
+        if (!linkRes.ok) {
+          const errData = await linkRes.json().catch(() => ({}));
+          throw new Error(errData.error || "Gagal menautkan nomor surat");
+        }
       }
 
       setStage("done"); setMessage("Dokumen berhasil diproses!");

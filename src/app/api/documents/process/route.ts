@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
       : extractedText.slice(0, 7000); // ~2 halaman
 
     // 6. Update document
-    await supabase.from("documents").update({
+    const { error: updateError } = await supabase.from("documents").update({
       category: aiResult.category,
       category_confidence: aiResult.category_confidence,
       summary: aiResult.summary,
@@ -119,6 +119,10 @@ export async function POST(request: NextRequest) {
       status: "processing",
       updated_at: new Date().toISOString(),
     }).eq("id", doc.id);
+
+    if (updateError) {
+      console.error("[Process] Update document (step 6) error:", JSON.stringify(updateError));
+    }
 
     // 7. Embeddings
     // Untuk dokumen via vision (tidak ada extractedText), pakai ringkasan+tags AI sebagai

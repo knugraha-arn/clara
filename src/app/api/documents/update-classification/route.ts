@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
 
   const { storagePath, classification, category, summary, validUntil, overrideReason } = await request.json();
 
-  const { data: doc } = await supabase
+  const { data: doc } = await adminSupabase
     .from("documents")
     .select("id, title, classification, classification_ai_suggestion, category, file_size, page_count")
     .eq("file_path", storagePath)
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     updateData.category_ai_suggestion = doc.category;
   }
 
-  const { data: updatedRows, error: updateError } = await supabase
+  const { data: updatedRows, error: updateError } = await adminSupabase
     .from("documents")
     .update(updateData)
     .eq("id", doc.id)
