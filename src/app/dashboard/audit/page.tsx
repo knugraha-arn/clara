@@ -12,9 +12,10 @@ const EVENT_CONFIG: Record<AuditEventType, { label: string; color: string; bg: s
   viewed:                      { label: "Dilihat",             color: "#6B7280", bg: "#F3F4F6", icon: "👁️" },
   downloaded:                  { label: "Download",            color: "#16A34A", bg: "#F0FDF4", icon: "⬇️" },
   deleted:                     { label: "Dihapus",             color: "#DC2626", bg: "#FEF2F2", icon: "🗑️" },
-  searched:                    { label: "Dicari",               color: "#9333EA", bg: "#FDF4FF", icon: "🔍" },
   classification_changed:      { label: "Klasifikasi Diubah",  color: "#D97706", bg: "#FFFBEB", icon: "🏷️" },
   role_changed:                { label: "Role Diubah",         color: "#0891B2", bg: "#ECFEFF", icon: "👤" },
+  user_suspended:               { label: "User Disuspend",      color: "#DC2626", bg: "#FEF2F2", icon: "🚫" },
+  user_unsuspended:             { label: "User Diaktifkan",     color: "#16A34A", bg: "#F0FDF4", icon: "✅" },
   number_created:              { label: "Nomor Dibuat",        color: "#0344D8", bg: "#EEF2FF", icon: "🆕" },
   number_approved:             { label: "Nomor Disetujui",     color: "#16A34A", bg: "#F0FDF4", icon: "✅" },
   number_revision_requested:   { label: "Nomor Revisi Diminta",color: "#D97706", bg: "#FFFBEB", icon: "✏️" },
@@ -57,6 +58,8 @@ async function generateAuditPDF(logs: DocumentLog[], eventFilter: string) {
         detail = String(log.metadata?.classification || "");
       } else if (log.event_type === "role_changed") {
         detail = String(log.metadata?.action || `${log.metadata?.from_role} → ${log.metadata?.to_role}`);
+      } else if (log.event_type === "user_suspended" || log.event_type === "user_unsuspended") {
+        detail = String(log.metadata?.target_user || "");
       } else if (log.event_type === "deleted") {
         detail = String(log.metadata?.reason || (log.metadata?.deleted_by_role ? `oleh ${log.metadata.deleted_by_role}` : ""));
       } else if (log.event_type === "number_approved" || log.event_type === "number_revision_requested") {
@@ -243,6 +246,8 @@ export default function AuditPage() {
                 detail = String(log.metadata?.classification || "");
               } else if (log.event_type === "role_changed") {
                 detail = String(log.metadata?.action || `${log.metadata?.from_role} → ${log.metadata?.to_role}`);
+              } else if (log.event_type === "user_suspended" || log.event_type === "user_unsuspended") {
+                detail = String(log.metadata?.target_user || "");
               } else if (log.event_type === "downloaded") {
                 detail = String(log.metadata?.classification || "");
               } else if (log.event_type === "deleted") {

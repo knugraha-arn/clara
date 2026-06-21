@@ -110,8 +110,8 @@ export async function PATCH(request: NextRequest) {
       document_title: "User: " + targetProfile.email,
       user_id: user.id,
       user_email: user.email || "",
-      event_type: "role_changed",
-      metadata: { target_user: targetProfile.email, action: "suspended" },
+      event_type: "user_suspended",
+      metadata: { target_user: targetProfile.email },
     });
 
   } else if (action === "unsuspend") {
@@ -126,8 +126,8 @@ export async function PATCH(request: NextRequest) {
       document_title: "User: " + targetProfile.email,
       user_id: user.id,
       user_email: user.email || "",
-      event_type: "role_changed",
-      metadata: { target_user: targetProfile.email, action: "unsuspended" },
+      event_type: "user_unsuspended",
+      metadata: { target_user: targetProfile.email },
     });
   }
 

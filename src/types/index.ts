@@ -4,12 +4,13 @@ export type DocumentCategory =
   | "laporan" | "undangan" | "pengumuman"
   | "invoice" | "po" | "berita_acara" | "lainnya";
 
-export type DocumentStatus = "processing" | "ready" | "error";
+export type DocumentStatus = "draft" | "processing" | "ready" | "error";
 export type DocumentClassification = "public" | "internal" | "confidential" | "restricted";
 export type RetentionPolicy = "standard" | "extended" | "permanent" | "custom";
 export type AuditEventType =
   | "uploaded" | "viewed" | "downloaded" | "deleted"
-  | "searched" | "classification_changed" | "role_changed"
+  | "classification_changed" | "role_changed"
+  | "user_suspended" | "user_unsuspended"
   | "number_created"
   | "number_approved" | "number_revision_requested" | "number_rejected"
   | "number_voided" | "number_resubmitted" | "number_linked"

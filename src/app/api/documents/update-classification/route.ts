@@ -45,7 +45,16 @@ export async function POST(request: NextRequest) {
     updateData.category_ai_suggestion = doc.category;
   }
 
-  await supabase.from("documents").update(updateData).eq("id", doc.id);
+  const { data: updatedRows, error: updateError } = await supabase
+    .from("documents")
+    .update(updateData)
+    .eq("id", doc.id)
+    .select();
+
+  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+  if (!updatedRows || updatedRows.length === 0) {
+    return NextResponse.json({ error: "Dokumen tidak dapat diperbarui (kemungkinan diblokir RLS atau bukan pemilik dokumen)" }, { status: 403 });
+  }
 
   // Log audit uploaded — dicatat saat konfirmasi
   await logEvent({
