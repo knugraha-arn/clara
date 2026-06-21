@@ -10,11 +10,15 @@ export async function GET(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const isAdmin = ["admin", "super_admin"].includes(profile?.role || "");
+
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status");
   const year = searchParams.get("year");
   const category = searchParams.get("category");
   const partyId = searchParams.get("party_id");
+  const linkable = searchParams.get("linkable") === "true";
 
   let query = supabase
     .from("document_numbers")
@@ -26,6 +30,8 @@ export async function GET(request: NextRequest) {
   if (year) query = query.eq("year", parseInt(year));
   if (category) query = query.eq("category", category);
   if (partyId) query = query.eq("party_id", partyId);
+  // Hanya tampilkan nomor yang boleh di-link user ini (pembuat sendiri, atau semua jika admin)
+  if (linkable && !isAdmin) query = query.eq("created_by", user.id);
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

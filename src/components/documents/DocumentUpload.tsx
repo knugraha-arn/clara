@@ -224,7 +224,7 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
 
       // Fetch issued numbers untuk linking
       try {
-        const numRes = await fetch("/api/document-numbers?status=issued");
+        const numRes = await fetch("/api/document-numbers?status=issued&linkable=true");
         const numData = await numRes.json();
         setIssuedNumbers(numData.numbers || []);
         // Pre-select nomor jika datang dari halaman Nomor Surat

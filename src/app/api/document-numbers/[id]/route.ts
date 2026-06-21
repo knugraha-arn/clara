@@ -216,6 +216,7 @@ export async function PATCH(
 
   // LINK DOKUMEN
   if (action === "link_document") {
+    if (!isOwner && !isAdmin) return NextResponse.json({ error: "Hanya pembuat nomor surat atau admin yang bisa menautkan dokumen ke nomor ini" }, { status: 403 });
     if (!documentId) return NextResponse.json({ error: "documentId diperlukan" }, { status: 400 });
     if (docNum.status !== "issued") return NextResponse.json({ error: "Hanya bisa link dokumen ke nomor Issued" }, { status: 400 });
 
