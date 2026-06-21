@@ -28,7 +28,7 @@ export interface Document {
   category: DocumentCategory;
   category_confidence: number;
   summary: string | null;
-  extracted_text_page1: string | null;
+  extracted_text_preview: string | null;
   status: DocumentStatus;
   page_count: number | null;
   tags: string[];

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { analyzeDocumentPage1, generateEmbedding, chunkText } from "@/lib/openai";
+import { analyzeDocumentPreview, generateEmbedding, chunkText } from "@/lib/openai";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -69,8 +69,8 @@ export async function POST(request: NextRequest) {
     const isScanned = extractedText.trim().length < 20;
     console.log(`[Process] is_scanned: ${isScanned}, text length: ${extractedText.length}`);
 
-    const textPage1 = extractedText.slice(0, 4000);
-    const aiResult = await analyzeDocumentPage1(textPage1 || `Nama file: ${fileName}`, fileName);
+    const textPreview = extractedText.slice(0, 7000); // ~2 halaman
+    const aiResult = await analyzeDocumentPreview(textPreview || `Nama file: ${fileName}`, fileName);
 
     // 5. Tentukan klasifikasi final
     // Dokumen scan: default confidential karena AI tidak bisa baca isi
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
       category: aiResult.category,
       category_confidence: aiResult.category_confidence,
       summary: aiResult.summary,
-      extracted_text_page1: textPage1,
+      extracted_text_preview: textPreview,
       page_count: pageCount,
       tags: aiResult.tags,
       is_scanned: isScanned,

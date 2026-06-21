@@ -3,7 +3,7 @@ import type { AiAnalysisResult, DocumentCategory, DocumentClassification } from 
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-export async function analyzeDocumentPage1(
+export async function analyzeDocumentPreview(
   extractedText: string,
   fileName: string
 ): Promise<AiAnalysisResult> {
@@ -13,7 +13,7 @@ Analisis dokumen PDF berikut dan berikan hasil dalam JSON.
 NAMA FILE: ${fileName}
 KONTEN DOKUMEN:
 ---
-${extractedText.slice(0, 3000)}
+${extractedText.slice(0, 7000)}
 ---
 
 Berikan HANYA JSON berikut tanpa penjelasan lain:
@@ -79,7 +79,7 @@ PENTING: Dokumen dengan kategori invoice, po, atau berita_acara HARUS diklasifik
 
     return parsed;
   } catch (error) {
-    console.error("[OpenAI] analyzeDocumentPage1 error:", error);
+    console.error("[OpenAI] analyzeDocumentPreview error:", error);
     return {
       summary: "Gagal menganalisis dokumen secara otomatis.",
       category: "lainnya",

@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     .select("*")
     .eq("status", "ready")
     .in("classification", classifications)
-    .or(`title.ilike.%${query}%,summary.ilike.%${query}%,extracted_text_page1.ilike.%${query}%`)
+    .or(`title.ilike.%${query}%,summary.ilike.%${query}%,extracted_text_preview.ilike.%${query}%`)
     .limit(5);
   if (filterCategory) exactQuery = exactQuery.eq("category", filterCategory);
   if (filterClassification) exactQuery = exactQuery.eq("classification", filterClassification);
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
   if (exactDocs) {
     for (const doc of exactDocs) {
       seenIds.add(doc.id);
-      results.push({ document: doc, score: 1.0, snippet: getSnippet(doc.extracted_text_page1 || doc.summary || "", query), match_type: "exact" });
+      results.push({ document: doc, score: 1.0, snippet: getSnippet(doc.extracted_text_preview || doc.summary || "", query), match_type: "exact" });
     }
   }
 
