@@ -28,6 +28,8 @@ interface AiSuggestion {
   summary: string;
   tags: string[];
   is_scanned: boolean;
+  used_vision: boolean;
+  page_count: number;
   documentId: string;
 }
 
@@ -216,6 +218,8 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
         summary: data.document.summary,
         tags: data.document.tags,
         is_scanned: data.document.is_scanned || false,
+        used_vision: data.document.used_vision || false,
+        page_count: data.document.page_count || 0,
         documentId,
       });
       setEditedSummary(data.document.summary || "");
@@ -557,14 +561,32 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
             {/* Klasifikasi */}
             <div>
               <p style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                {aiSuggestion.is_scanned ? "Pilih Klasifikasi" : `Klasifikasi AI (${Math.round(aiSuggestion.classification_confidence * 100)}% yakin)`}
+                {(aiSuggestion.is_scanned && !aiSuggestion.used_vision) ? "Pilih Klasifikasi" : `Klasifikasi AI (${Math.round(aiSuggestion.classification_confidence * 100)}% yakin)`}
               </p>
-              {!aiSuggestion.is_scanned && (
+              {(!aiSuggestion.is_scanned || aiSuggestion.used_vision) && (
                 <div style={{ backgroundColor: CLASSIFICATION_CONFIG[aiSuggestion.classification].bg, border: `1px solid ${CLASSIFICATION_CONFIG[aiSuggestion.classification].border}`, borderRadius: 8, padding: "8px 12px", marginBottom: 8 }}>
                   <span style={{ fontSize: 12, fontWeight: 700, color: CLASSIFICATION_CONFIG[aiSuggestion.classification].color }}>{CLASSIFICATION_CONFIG[aiSuggestion.classification].label}</span>
                   <span style={{ fontSize: 11, color: "#6B7280", marginLeft: 8 }}>— {aiSuggestion.classification_reason}</span>
                 </div>
               )}
+              {/* Cakupan baca AI — supaya user tahu persis bagian mana yang dianalisis */}
+              {aiSuggestion.used_vision ? (
+                <p style={{ fontSize: 10.5, color: "#0891B2", margin: "0 0 8px", display: "flex", alignItems: "center", gap: 4 }}>
+                  📄 AI membaca seluruh {aiSuggestion.page_count || "—"} halaman dokumen ini (mode scan/gambar)
+                </p>
+              ) : aiSuggestion.is_scanned ? (
+                <p style={{ fontSize: 10.5, color: "#D97706", margin: "0 0 8px" }}>
+                  ⚠️ Dokumen terdeteksi scan tapi tidak bisa dianalisis AI (file terlalu besar) — klasifikasi perlu dipilih manual
+                </p>
+              ) : aiSuggestion.page_count > 2 ? (
+                <p style={{ fontSize: 10.5, color: "#9CA3AF", margin: "0 0 8px" }}>
+                  📄 AI membaca ~2 halaman pertama dari total {aiSuggestion.page_count} halaman
+                </p>
+              ) : aiSuggestion.page_count > 0 ? (
+                <p style={{ fontSize: 10.5, color: "#9CA3AF", margin: "0 0 8px" }}>
+                  📄 AI sudah membaca seluruh {aiSuggestion.page_count} halaman dokumen ini
+                </p>
+              ) : null}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
                 {(Object.keys(CLASSIFICATION_CONFIG) as DocumentClassification[]).map(cls => {
                   const cfg = CLASSIFICATION_CONFIG[cls];

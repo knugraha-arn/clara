@@ -173,6 +173,8 @@ export async function POST(request: NextRequest) {
         classification_overridden: isOverridden,
         classification_reason: aiResult.classification_reason,
         is_scanned: isScanned,
+        used_vision: usedVision,
+        page_count: pageCount,
       },
     });
 
