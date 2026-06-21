@@ -3,20 +3,7 @@ import type { AiAnalysisResult, DocumentCategory, DocumentClassification } from 
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-export async function analyzeDocumentPreview(
-  extractedText: string,
-  fileName: string
-): Promise<AiAnalysisResult> {
-  const prompt = `Kamu adalah sistem analisis dokumen untuk organisasi Indonesia.
-Analisis dokumen PDF berikut dan berikan hasil dalam JSON.
-
-NAMA FILE: ${fileName}
-KONTEN DOKUMEN:
----
-${extractedText.slice(0, 7000)}
----
-
-Berikan HANYA JSON berikut tanpa penjelasan lain:
+const ANALYSIS_INSTRUCTIONS = `Berikan HANYA JSON berikut tanpa penjelasan lain:
 {
   "summary": "Ringkasan 2-3 kalimat bahasa Indonesia",
   "category": "surat_masuk | surat_keluar | kontrak | nda | memo | prosedur | kebijakan | instruksi_kerja | template | laporan | undangan | pengumuman | invoice | po | berita_acara | lainnya",
@@ -56,6 +43,52 @@ Panduan klasifikasi:
 
 PENTING: Dokumen dengan kategori invoice, po, atau berita_acara HARUS diklasifikasikan sebagai restricted kecuali ada alasan kuat sebaliknya.`;
 
+function fallbackResult(): AiAnalysisResult {
+  return {
+    summary: "Gagal menganalisis dokumen secara otomatis.",
+    category: "lainnya",
+    category_confidence: 0,
+    classification: "internal",
+    classification_confidence: 0,
+    classification_reason: "Default klasifikasi",
+    tags: [],
+    document_date: null,
+    sender: null,
+    recipient: null,
+  };
+}
+
+function parseAnalysisResponse(text: string): AiAnalysisResult {
+  const parsed = JSON.parse(text) as AiAnalysisResult;
+
+  const validCategories: DocumentCategory[] = [
+    "surat_masuk", "surat_keluar", "kontrak", "nda", "memo",
+    "prosedur", "kebijakan", "instruksi_kerja", "template",
+    "laporan", "undangan", "pengumuman", "invoice", "po", "berita_acara", "lainnya"
+  ];
+  if (!validCategories.includes(parsed.category)) parsed.category = "lainnya";
+
+  const validClassifications: DocumentClassification[] = ["public", "internal", "confidential", "restricted"];
+  if (!validClassifications.includes(parsed.classification)) parsed.classification = "internal";
+
+  return parsed;
+}
+
+export async function analyzeDocumentPreview(
+  extractedText: string,
+  fileName: string
+): Promise<AiAnalysisResult> {
+  const prompt = `Kamu adalah sistem analisis dokumen untuk organisasi Indonesia.
+Analisis dokumen PDF berikut dan berikan hasil dalam JSON.
+
+NAMA FILE: ${fileName}
+KONTEN DOKUMEN:
+---
+${extractedText.slice(0, 7000)}
+---
+
+${ANALYSIS_INSTRUCTIONS}`;
+
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -64,34 +97,54 @@ PENTING: Dokumen dengan kategori invoice, po, atau berita_acara HARUS diklasifik
       response_format: { type: "json_object" },
     });
 
-    const text = response.choices[0].message.content || "{}";
-    const parsed = JSON.parse(text) as AiAnalysisResult;
-
-    const validCategories: DocumentCategory[] = [
-      "surat_masuk", "surat_keluar", "kontrak", "nda", "memo",
-      "prosedur", "kebijakan", "instruksi_kerja", "template",
-      "laporan", "undangan", "pengumuman", "invoice", "po", "berita_acara", "lainnya"
-    ];
-    if (!validCategories.includes(parsed.category)) parsed.category = "lainnya";
-
-    const validClassifications: DocumentClassification[] = ["public", "internal", "confidential", "restricted"];
-    if (!validClassifications.includes(parsed.classification)) parsed.classification = "internal";
-
-    return parsed;
+    return parseAnalysisResponse(response.choices[0].message.content || "{}");
   } catch (error) {
     console.error("[OpenAI] analyzeDocumentPreview error:", error);
-    return {
-      summary: "Gagal menganalisis dokumen secara otomatis.",
-      category: "lainnya",
-      category_confidence: 0,
-      classification: "internal",
-      classification_confidence: 0,
-      classification_reason: "Default klasifikasi",
-      tags: [],
-      document_date: null,
-      sender: null,
-      recipient: null,
-    };
+    return fallbackResult();
+  }
+}
+
+// Untuk dokumen hasil scan (tidak ada teks yang bisa diekstrak) — kirim PDF
+// langsung ke model vision-capable, yang membaca gambar tiap halaman.
+// PDF dibatasi ~2 halaman pertama secara implisit oleh caller (lihat process/route.ts)
+// supaya biaya token tetap terkendali dan konsisten dengan analisis dokumen biasa.
+export async function analyzeScannedDocument(
+  pdfBase64: string,
+  fileName: string
+): Promise<AiAnalysisResult> {
+  const prompt = `Kamu adalah sistem analisis dokumen untuk organisasi Indonesia.
+Dokumen PDF ini adalah hasil SCAN (gambar) — baca isinya langsung dari gambar halaman yang diberikan.
+
+NAMA FILE: ${fileName}
+
+${ANALYSIS_INSTRUCTIONS}`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            {
+              type: "file",
+              file: {
+                filename: fileName,
+                file_data: `data:application/pdf;base64,${pdfBase64}`,
+              },
+            },
+          ],
+        },
+      ],
+      temperature: 0.1,
+      response_format: { type: "json_object" },
+    });
+
+    return parseAnalysisResponse(response.choices[0].message.content || "{}");
+  } catch (error) {
+    console.error("[OpenAI] analyzeScannedDocument error:", error);
+    return fallbackResult();
   }
 }
 

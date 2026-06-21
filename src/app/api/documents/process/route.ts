@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { analyzeDocumentPreview, generateEmbedding, chunkText } from "@/lib/openai";
+import { analyzeDocumentPreview, analyzeScannedDocument, generateEmbedding, chunkText } from "@/lib/openai";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -50,12 +50,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Gagal mengunduh file" }, { status: 500 });
     }
 
+    const arrayBuffer = await fileData.arrayBuffer();
+
     // 3. Extract text
     let extractedText = "";
     let pageCount = 0;
     try {
       const { extractText } = await import("unpdf");
-      const arrayBuffer = await fileData.arrayBuffer();
       const uint8 = new Uint8Array(arrayBuffer);
       const result = await extractText(uint8, { mergePages: true });
       extractedText = Array.isArray(result.text) ? result.text.join("\n") : (result.text || "");
@@ -69,14 +70,37 @@ export async function POST(request: NextRequest) {
     const isScanned = extractedText.trim().length < 20;
     console.log(`[Process] is_scanned: ${isScanned}, text length: ${extractedText.length}`);
 
-    const textPreview = extractedText.slice(0, 7000); // ~2 halaman
-    const aiResult = await analyzeDocumentPreview(textPreview || `Nama file: ${fileName}`, fileName);
+    // Batas ukuran file untuk vision — base64 menambah ~33% ukuran, API limit 50MB per request.
+    // 15MB asli -> ~20MB base64, aman dengan margin besar untuk teks prompt tambahan.
+    const VISION_MAX_FILE_BYTES = 15 * 1024 * 1024;
+    let usedVision = false;
+
+    let aiResult;
+    if (isScanned && arrayBuffer.byteLength <= VISION_MAX_FILE_BYTES) {
+      console.log(`[Process] Dokumen scan terdeteksi, mencoba analisis via vision (${(arrayBuffer.byteLength / 1024 / 1024).toFixed(1)}MB)`);
+      const pdfBase64 = Buffer.from(arrayBuffer).toString("base64");
+      aiResult = await analyzeScannedDocument(pdfBase64, fileName);
+      usedVision = true;
+    } else {
+      if (isScanned) {
+        console.log(`[Process] Dokumen scan tapi terlalu besar untuk vision (${(arrayBuffer.byteLength / 1024 / 1024).toFixed(1)}MB), lanjut tanpa analisis konten`);
+      }
+      const textPreview = extractedText.slice(0, 7000); // ~2 halaman
+      aiResult = await analyzeDocumentPreview(textPreview || `Nama file: ${fileName}`, fileName);
+    }
 
     // 5. Tentukan klasifikasi final
-    // Dokumen scan: default confidential karena AI tidak bisa baca isi
-    const aiClassification = isScanned ? "confidential" : aiResult.classification;
+    // Dokumen scan TANPA vision (gagal/terlalu besar): default confidential karena AI tidak bisa baca isi.
+    // Dokumen scan DENGAN vision berhasil: pakai hasil analisis vision, sama seperti dokumen teks biasa.
+    const aiClassification = (isScanned && !usedVision) ? "confidential" : aiResult.classification;
     const finalClassification = classificationOverride || aiClassification;
     const isOverridden = !!classificationOverride && classificationOverride !== aiClassification;
+
+    // Simpan potongan teks untuk pencarian — kalau via vision, tidak ada extractedText asli,
+    // jadi pakai ringkasan AI sebagai gantinya supaya tetap bisa dicari
+    const textPreview = usedVision
+      ? (aiResult.summary || "")
+      : extractedText.slice(0, 7000); // ~2 halaman
 
     // 6. Update document
     await supabase.from("documents").update({
@@ -89,7 +113,7 @@ export async function POST(request: NextRequest) {
       is_scanned: isScanned,
       classification: finalClassification,
       classification_ai_suggestion: aiClassification,
-      classification_confidence: isScanned ? 0 : aiResult.classification_confidence,
+      classification_confidence: (isScanned && !usedVision) ? 0 : aiResult.classification_confidence,
       classification_overridden: isOverridden,
       classification_override_reason: isOverridden ? (overrideReason || null) : null,
       status: "processing",
@@ -97,8 +121,14 @@ export async function POST(request: NextRequest) {
     }).eq("id", doc.id);
 
     // 7. Embeddings
-    if (extractedText.length > 10) {
-      const chunks = chunkText(extractedText);
+    // Untuk dokumen via vision (tidak ada extractedText), pakai ringkasan+tags AI sebagai
+    // bahan embedding supaya dokumen tetap muncul di semantic search
+    const embeddingSourceText = usedVision
+      ? [aiResult.summary, ...(aiResult.tags || [])].filter(Boolean).join(". ")
+      : extractedText;
+
+    if (embeddingSourceText.length > 10) {
+      const chunks = chunkText(embeddingSourceText);
       const embeddingPromises = chunks.slice(0, 20).map(async (chunk, index) => {
         try {
           const embedding = await generateEmbedding(chunk);
@@ -135,7 +165,7 @@ export async function POST(request: NextRequest) {
         tags: aiResult.tags,
         classification: finalClassification,
         classification_ai_suggestion: aiClassification,
-        classification_confidence: isScanned ? 0 : aiResult.classification_confidence,
+        classification_confidence: (isScanned && !usedVision) ? 0 : aiResult.classification_confidence,
         classification_overridden: isOverridden,
         classification_reason: aiResult.classification_reason,
         is_scanned: isScanned,
