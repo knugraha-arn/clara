@@ -66,6 +66,12 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
 
   const supabase = createClient();
 
+  // Ref untuk melacak stage & documentId terkini tanpa stale closure di cleanup effect
+  const latestRef = useRef<{ stage: Stage; documentId: string | null }>({ stage: "idle", documentId: null });
+  useEffect(() => {
+    latestRef.current = { stage, documentId: aiSuggestion?.documentId || null };
+  });
+
   // Deteksi apakah user sudah mengisi sesuatu di form konfirmasi
   const hasUnsavedChanges = stage === "confirm" && (
     parties.length > 0 ||
@@ -75,15 +81,19 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
     !!validUntil
   );
 
-  // Cleanup saat komponen unmount (pindah halaman)
+  // Cleanup saat komponen BENAR-BENAR unmount (pindah halaman/tutup modal)
+  // Pakai ref, bukan closure stage langsung — supaya tidak retrigger
+  // setiap kali stage berubah (effect dengan deps [stage, ...] akan
+  // menjalankan cleanup LAMA setiap render, bukan cuma saat unmount sungguhan)
   useEffect(() => {
     return () => {
-      if (stage === "confirm" && aiSuggestion?.documentId) {
-        // Fire and forget — hapus dokumen draft saat user pindah halaman
-        fetch(`/api/documents?id=${aiSuggestion.documentId}`, { method: "DELETE" }).catch(() => {});
+      const { stage: currentStage, documentId } = latestRef.current;
+      if (currentStage === "confirm" && documentId) {
+        // Fire and forget — hapus dokumen draft saat user pindah halaman/tutup modal
+        fetch(`/api/documents?id=${documentId}`, { method: "DELETE" }).catch(() => {});
       }
     };
-  }, [stage, aiSuggestion?.documentId]);
+  }, []);
 
   // Fetch party suggestions — trigger dari 1 karakter
   useEffect(() => {

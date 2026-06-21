@@ -82,10 +82,14 @@ export async function POST(
   }
 
   // Link ke dokumen
-  await supabase.from("document_parties").upsert({
+  const { error: linkError } = await adminSupabase.from("document_parties").upsert({
     document_id: id,
     party_id: partyId,
   });
+
+  if (linkError) {
+    return NextResponse.json({ error: linkError.message }, { status: 500 });
+  }
 
   return NextResponse.json({ success: true, partyId });
 }
