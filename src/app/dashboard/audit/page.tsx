@@ -15,6 +15,7 @@ const EVENT_CONFIG: Record<AuditEventType, { label: string; color: string; bg: s
   searched:                    { label: "Dicari",               color: "#9333EA", bg: "#FDF4FF", icon: "🔍" },
   classification_changed:      { label: "Klasifikasi Diubah",  color: "#D97706", bg: "#FFFBEB", icon: "🏷️" },
   role_changed:                { label: "Role Diubah",         color: "#0891B2", bg: "#ECFEFF", icon: "👤" },
+  number_created:              { label: "Nomor Dibuat",        color: "#0344D8", bg: "#EEF2FF", icon: "🆕" },
   number_approved:             { label: "Nomor Disetujui",     color: "#16A34A", bg: "#F0FDF4", icon: "✅" },
   number_revision_requested:   { label: "Nomor Revisi Diminta",color: "#D97706", bg: "#FFFBEB", icon: "✏️" },
   number_rejected:             { label: "Nomor Ditolak",       color: "#DC2626", bg: "#FEF2F2", icon: "❌" },
@@ -22,6 +23,8 @@ const EVENT_CONFIG: Record<AuditEventType, { label: string; color: string; bg: s
   number_resubmitted:          { label: "Nomor Diajukan Ulang",color: "#0891B2", bg: "#ECFEFF", icon: "🔁" },
   number_linked:               { label: "Nomor Ditautkan",     color: "#0344D8", bg: "#EEF2FF", icon: "🔗" },
   number_description_edited:   { label: "Deskripsi Nomor Diubah", color: "#6B7280", bg: "#F3F4F6", icon: "📝" },
+  party_created:                { label: "Pihak Dibuat",        color: "#0344D8", bg: "#EEF2FF", icon: "🏢" },
+  party_unlinked:                { label: "Pihak Dilepas",       color: "#D97706", bg: "#FFFBEB", icon: "🔓" },
 };
 
 async function generateAuditPDF(logs: DocumentLog[], eventFilter: string) {
@@ -70,6 +73,12 @@ async function generateAuditPDF(logs: DocumentLog[], eventFilter: string) {
         detail = String(log.metadata?.number || "");
       } else if (log.event_type === "number_description_edited") {
         detail = `${log.metadata?.from} → ${log.metadata?.to}`;
+      } else if (log.event_type === "number_created") {
+        detail = String(log.metadata?.party_name || "") + (log.metadata?.is_backdated ? " (backdated)" : "");
+      } else if (log.event_type === "party_created") {
+        detail = String(log.metadata?.abbreviation || "");
+      } else if (log.event_type === "party_unlinked") {
+        detail = String(log.metadata?.party_name || "");
       }
       return [
         formatDateTime(log.created_at),
@@ -252,6 +261,12 @@ export default function AuditPage() {
                 detail = String(log.metadata?.number || "");
               } else if (log.event_type === "number_description_edited") {
                 detail = `${log.metadata?.from} → ${log.metadata?.to}`;
+              } else if (log.event_type === "number_created") {
+                detail = String(log.metadata?.party_name || "") + (log.metadata?.is_backdated ? " (backdated)" : "");
+              } else if (log.event_type === "party_created") {
+                detail = String(log.metadata?.abbreviation || "");
+              } else if (log.event_type === "party_unlinked") {
+                detail = String(log.metadata?.party_name || "");
               }
 
               return (

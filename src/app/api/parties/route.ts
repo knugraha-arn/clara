@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { logEvent } from "@/lib/audit";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -37,8 +38,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
+  const adminSupabase = await createAdminClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", user.id).single();
 
   const { name, abbreviation } = await request.json();
   if (!name?.trim()) return NextResponse.json({ error: "Nama party wajib diisi" }, { status: 400 });
@@ -68,6 +72,17 @@ export async function POST(request: NextRequest) {
     if (error.code === "23505") return NextResponse.json({ error: "Party sudah ada" }, { status: 409 });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await logEvent({
+    supabase: adminSupabase,
+    documentTitle: `Pihak: ${party.name}`,
+    userId: user.id,
+    userEmail: user.email || "",
+    userName: profile?.full_name || undefined,
+    eventType: "party_created",
+    metadata: { party_id: party.id, name: party.name, abbreviation: party.abbreviation },
+    request,
+  });
 
   return NextResponse.json({ party });
 }

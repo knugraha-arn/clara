@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { logEvent } from "@/lib/audit";
 
 const ROMAN = ["", "I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"];
 
@@ -175,6 +176,26 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logEvent({
+    supabase: adminSupabase,
+    documentTitle: `${docNum.number} — ${description}`,
+    userId: user.id,
+    userEmail: user.email || "",
+    userName: profile?.full_name || undefined,
+    eventType: "number_created",
+    metadata: {
+      number_id: docNum.id,
+      number: docNum.number,
+      party_name: partyName,
+      category,
+      classification,
+      is_backdated: isBackdated,
+      initial_status: status,
+      backdated_reason: isBackdated ? (backdated_reason || null) : null,
+    },
+    request,
+  });
 
   return NextResponse.json({ number: docNum, isBackdated, status });
 }

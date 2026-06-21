@@ -10,9 +10,11 @@ export type RetentionPolicy = "standard" | "extended" | "permanent" | "custom";
 export type AuditEventType =
   | "uploaded" | "viewed" | "downloaded" | "deleted"
   | "searched" | "classification_changed" | "role_changed"
+  | "number_created"
   | "number_approved" | "number_revision_requested" | "number_rejected"
   | "number_voided" | "number_resubmitted" | "number_linked"
-  | "number_description_edited";
+  | "number_description_edited"
+  | "party_created" | "party_unlinked";
 
 export interface Document {
   id: string;

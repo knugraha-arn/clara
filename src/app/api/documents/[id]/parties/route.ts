@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { logEvent } from "@/lib/audit";
 
 export async function GET(
   request: NextRequest,
@@ -28,8 +29,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const supabase = await createClient();
+  const adminSupabase = await createAdminClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", user.id).single();
 
   const { id } = await params;
   const { name, abbreviation } = await request.json();
@@ -64,6 +68,17 @@ export async function POST(
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     partyId = newParty.id;
+
+    await logEvent({
+      supabase: adminSupabase,
+      documentTitle: `Pihak: ${newParty.name}`,
+      userId: user.id,
+      userEmail: user.email || "",
+      userName: profile?.full_name || undefined,
+      eventType: "party_created",
+      metadata: { party_id: newParty.id, name: newParty.name, abbreviation: newParty.abbreviation, created_via: "document_link" },
+      request,
+    });
   }
 
   // Link ke dokumen
@@ -80,8 +95,15 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const supabase = await createClient();
+  const adminSupabase = await createAdminClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { data: profile } = await supabase.from("profiles").select("role, full_name").eq("id", user.id).single();
+  const role = profile?.role || "viewer";
+  if (!["contributor", "admin", "super_admin"].includes(role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { id } = await params;
   const { searchParams } = new URL(request.url);
@@ -89,10 +111,28 @@ export async function DELETE(
 
   if (!partyId) return NextResponse.json({ error: "party_id required" }, { status: 400 });
 
-  await supabase.from("document_parties")
+  const { data: doc } = await supabase.from("documents").select("title").eq("id", id).single();
+  const { data: party } = await supabase.from("parties").select("name").eq("id", partyId).single();
+
+  const { error } = await supabase
+    .from("document_parties")
     .delete()
     .eq("document_id", id)
     .eq("party_id", partyId);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logEvent({
+    supabase: adminSupabase,
+    documentId: id,
+    documentTitle: doc?.title || "Unknown",
+    userId: user.id,
+    userEmail: user.email || "",
+    userName: profile?.full_name || undefined,
+    eventType: "party_unlinked",
+    metadata: { party_id: partyId, party_name: party?.name || "Unknown" },
+    request,
+  });
 
   return NextResponse.json({ success: true });
 }
