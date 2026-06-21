@@ -13,6 +13,11 @@ export async function POST(request: NextRequest) {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+    if (!["contributor", "admin", "super_admin"].includes(profile?.role || "")) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const { storagePath, fileName, fileSize, title, classificationOverride, overrideReason } = await request.json();
     if (!storagePath) return NextResponse.json({ error: "storagePath diperlukan" }, { status: 400 });
 

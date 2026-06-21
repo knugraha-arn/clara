@@ -56,6 +56,10 @@ async function generateAuditPDF(logs: DocumentLog[], eventFilter: string) {
         detail = `${log.metadata?.from} → ${log.metadata?.to}`;
       } else if (log.event_type === "uploaded") {
         detail = String(log.metadata?.classification || "");
+      } else if (log.event_type === "viewed") {
+        detail = log.metadata?.via === "ai_assistant"
+          ? `via AI — ${(log.metadata?.sensitive_documents as unknown[])?.length || 0} dok. sensitif`
+          : String(log.metadata?.classification || "");
       } else if (log.event_type === "role_changed") {
         detail = String(log.metadata?.action || `${log.metadata?.from_role} → ${log.metadata?.to_role}`);
       } else if (log.event_type === "user_suspended" || log.event_type === "user_unsuspended") {
@@ -244,6 +248,10 @@ export default function AuditPage() {
                 if (log.metadata?.reason) detail += ` (${log.metadata.reason})`;
               } else if (log.event_type === "uploaded") {
                 detail = String(log.metadata?.classification || "");
+              } else if (log.event_type === "viewed") {
+                detail = log.metadata?.via === "ai_assistant"
+                  ? `via AI — ${(log.metadata?.sensitive_documents as unknown[])?.length || 0} dok. sensitif`
+                  : String(log.metadata?.classification || "");
               } else if (log.event_type === "role_changed") {
                 detail = String(log.metadata?.action || `${log.metadata?.from_role} → ${log.metadata?.to_role}`);
               } else if (log.event_type === "user_suspended" || log.event_type === "user_unsuspended") {

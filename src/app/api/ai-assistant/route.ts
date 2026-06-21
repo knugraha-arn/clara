@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { embedSearchQuery } from "@/lib/openai";
+import { logEvent } from "@/lib/audit";
 import OpenAI from "openai";
 
 export const maxDuration = 60;
@@ -311,6 +312,26 @@ INSTRUKSI KRITIS:
     query: "[AI] " + question,
     result_count: allDocs.length,
   });
+
+  // Audit log — AI mengakses & merangkum dokumen sensitif ke dalam jawaban (ISO 27001 A.8.16)
+  const sensitiveDocsInContext = allDocs.slice(0, 50).filter(d => ["confidential", "restricted"].includes(d.classification));
+  if (sensitiveDocsInContext.length > 0) {
+    const adminSupabase = await createAdminClient();
+    await logEvent({
+      supabase: adminSupabase,
+      documentTitle: `AI Assistant: ${question.slice(0, 80)}`,
+      userId: user.id,
+      userEmail: user.email || "",
+      userName: profile?.full_name || undefined,
+      eventType: "viewed",
+      metadata: {
+        via: "ai_assistant",
+        question: question.slice(0, 200),
+        sensitive_documents: sensitiveDocsInContext.map(d => ({ id: d.id, title: d.title, classification: d.classification })),
+      },
+      request,
+    });
+  }
 
   return NextResponse.json({
     answer,

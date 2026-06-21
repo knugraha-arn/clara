@@ -9,6 +9,11 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const { data: profile } = await supabase.from("profiles").select("role, full_name").eq("id", user.id).single();
+  if (!["contributor", "admin", "super_admin"].includes(profile?.role || "")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { storagePath, classification, category, summary, validUntil, overrideReason } = await request.json();
 
   const { data: doc } = await supabase
@@ -18,8 +23,6 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (!doc) return NextResponse.json({ error: "Dokumen tidak ditemukan" }, { status: 404 });
-
-  const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", user.id).single();
 
   const updateData: Record<string, unknown> = {
     status: "ready",  // dokumen resmi tersimpan saat user konfirmasi

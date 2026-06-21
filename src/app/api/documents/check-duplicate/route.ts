@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+function allowedClassifications(role: string): string[] {
+  if (["admin", "super_admin"].includes(role)) return ["public", "internal", "confidential", "restricted"];
+  if (["contributor", "auditor"].includes(role)) return ["public", "internal", "confidential"];
+  return ["public", "internal"];
+}
+
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const classifications = allowedClassifications(profile?.role || "viewer");
 
   const { documentId } = await request.json();
   if (!documentId) return NextResponse.json({ duplicates: [] });
@@ -56,7 +65,8 @@ export async function POST(request: NextRequest) {
             .from("documents")
             .select("id, title, category, classification, created_at")
             .in("id", otherDocIds)
-            .eq("status", "ready");
+            .eq("status", "ready")
+            .in("classification", classifications);
 
           if (similarDocDetails && similarDocDetails.length > 0) {
             const duplicates = similarDocDetails.map((doc: {
@@ -86,6 +96,7 @@ export async function POST(request: NextRequest) {
     .from("documents")
     .select("id, title, category, classification, created_at, file_name, file_size")
     .eq("status", "ready")
+    .in("classification", classifications)
     .neq("id", documentId)
     .or(`file_name.eq.${currentDoc.file_name},title.eq.${currentDoc.title}`);
 
