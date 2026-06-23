@@ -126,6 +126,46 @@ export interface UserProfile {
   created_at: string;
 }
 
+export type ComplianceStandard = "iso9001" | "iso27001";
+export type ComplianceStatus = "implemented" | "partial" | "gap";
+
+export interface ComplianceMetric {
+  label: string;
+  value: number | string;
+  /** true kalau angka ini menandakan ada yang perlu diperhatikan (misal backlog > 0) */
+  flagged?: boolean;
+}
+
+export interface ComplianceControl {
+  id: string;
+  standard: ComplianceStandard;
+  clause: string;
+  title: string;
+  description: string;
+  status: ComplianceStatus;
+  evidence: string;
+  gapNote?: string;
+  metric?: ComplianceMetric;
+}
+
+export interface ComplianceSummary {
+  total: number;
+  implemented: number;
+  partial: number;
+  gap: number;
+  scorePct: number;
+}
+
+export interface ComplianceReport {
+  generatedAt: string;
+  controls: ComplianceControl[];
+  summary: {
+    overall: ComplianceSummary;
+    iso9001: ComplianceSummary;
+    iso27001: ComplianceSummary;
+  };
+}
+
 export interface UploadProgress {
   stage: "uploading" | "extracting" | "analyzing" | "embedding" | "done" | "error";
   progress: number;

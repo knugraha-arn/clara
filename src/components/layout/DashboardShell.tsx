@@ -26,6 +26,7 @@ const NAV: NavItem[] = [
   { href: "/dashboard/register", icon: "📒", label: "Doc Register",  roles: ["auditor", "admin", "super_admin"] },
   { href: "/dashboard/audit",    icon: "📋", label: "Audit Trail",   roles: ["auditor", "admin", "super_admin"] },
   { href: "/dashboard/stats",    icon: "📊", label: "Statistik",     roles: ["admin", "super_admin"] },
+  { href: "/dashboard/compliance", icon: "✅", label: "Kepatuhan ISO", roles: ["admin", "super_admin"] },
   { href: "/dashboard/config",   icon: "⚙️", label: "Konfigurasi",   roles: ["super_admin"] },
 ];
 
