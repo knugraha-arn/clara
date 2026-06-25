@@ -125,7 +125,7 @@ export default function EditRequestsPage() {
   };
 
   return (
-    <>
+    <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif", padding: "24px 28px" }}>
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: "#1A1F2E", margin: "0 0 4px" }}>Persetujuan Perubahan Dokumen</h1>
         <p style={{ fontSize: 13, color: "#6B7280", margin: 0 }}>Log immutable — semua keputusan tercatat di Audit Trail</p>
@@ -210,6 +210,6 @@ export default function EditRequestsPage() {
           onCancel={() => setReviewModal(null)}
         />
       )}
-    </>
+    </div>
   );
 }
