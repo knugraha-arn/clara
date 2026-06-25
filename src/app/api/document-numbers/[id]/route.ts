@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { logEvent } from "@/lib/audit";
+import { sendEmail, buildNumberDecisionNotificationEmail } from "@/lib/email";
 
 const ROMAN = ["","I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"];
 
@@ -32,6 +33,38 @@ export async function PATCH(
 
   const now = new Date().toISOString();
 
+  // Email balik ke pembuat nomor surat — sama pola dengan notifikasi di fitur Edit Request.
+  // Tidak dipakai untuk resubmit/link_document/edit_description karena itu aksi requester
+  // sendiri, bukan keputusan admin yang perlu dikabari balik.
+  const notifyRequester = async (decision: "approved" | "revision" | "rejected" | "void") => {
+    if (!docNum.created_by) return;
+    const { data: requesterProfile } = await adminSupabase
+      .from("profiles").select("email").eq("id", docNum.created_by).single();
+    if (!requesterProfile?.email) return;
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://clara.arranetwork.com";
+    const html = buildNumberDecisionNotificationEmail({
+      number: docNum.number,
+      description: docNum.description,
+      decision,
+      reviewerName: profile?.full_name || user.email || "Admin",
+      reviewNote: note?.trim() || null,
+      documentUrl: `${appUrl}/dashboard/numbers`,
+    });
+
+    const result = await sendEmail({
+      to: requesterProfile.email,
+      subject: `[CLARA] Nomor Surat ${docNum.number} ${
+        decision === "approved" ? "Disetujui" : decision === "revision" ? "Perlu Direvisi" : decision === "rejected" ? "Ditolak" : "Dibatalkan"
+      }`,
+      html,
+    });
+
+    if (!result.success) {
+      console.error("[DocumentNumbers] Gagal kirim email keputusan ke requester:", result.error);
+    }
+  };
+
   // APPROVE
   if (action === "approve") {
     if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -62,6 +95,7 @@ export async function PATCH(
       request,
     });
 
+    await notifyRequester("approved");
     return NextResponse.json({ success: true });
   }
 
@@ -92,6 +126,7 @@ export async function PATCH(
       request,
     });
 
+    await notifyRequester("revision");
     return NextResponse.json({ success: true });
   }
 
@@ -148,6 +183,7 @@ export async function PATCH(
       request,
     });
 
+    await notifyRequester("rejected");
     return NextResponse.json({ success: true });
   }
 
@@ -183,6 +219,7 @@ export async function PATCH(
       request,
     });
 
+    await notifyRequester("void");
     return NextResponse.json({ success: true });
   }
 
