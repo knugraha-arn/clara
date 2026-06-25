@@ -57,7 +57,13 @@ export async function POST(request: NextRequest) {
     let pageCount = 0;
     try {
       const { extractText } = await import("unpdf");
-      const uint8 = new Uint8Array(arrayBuffer);
+      // PENTING: kasih unpdf salinan independen (slice), bukan view langsung dari
+      // `arrayBuffer`. unpdf/pdf.js men-transfer buffer ke worker internalnya yang
+      // men-detach ArrayBuffer aslinya — kalau kita kasih view langsung, `arrayBuffer`
+      // ikut ke-detach dan bikin langkah vision di bawah (yang reuse `arrayBuffer`
+      // untuk dokumen scan) gagal dengan "Cannot perform Construct on a detached
+      // ArrayBuffer".
+      const uint8 = new Uint8Array(arrayBuffer.slice(0));
       const result = await extractText(uint8, { mergePages: true });
       extractedText = Array.isArray(result.text) ? result.text.join("\n") : (result.text || "");
       pageCount = result.totalPages || 0;
