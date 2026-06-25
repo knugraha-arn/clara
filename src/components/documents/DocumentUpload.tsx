@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { generateStoragePath } from "@/lib/utils";
 import { useCategories } from "@/lib/hooks/useCategories";
+import { toFriendlyError, type FriendlyError } from "@/lib/errors/friendlyMessage";
 import type { DocumentClassification } from "@/types";
 
 const CLASSIFICATION_CONFIG: Record<DocumentClassification, { label: string; color: string; bg: string; border: string; desc: string }> = {
@@ -45,6 +46,8 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
   const [stage, setStage] = useState<Stage>("idle");
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState("");
+  const [friendlyError, setFriendlyError] = useState<FriendlyError | null>(null);
+  const [showErrorDetail, setShowErrorDetail] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState<AiSuggestion | null>(null);
   const [storagePath, setStoragePath] = useState("");
   const [selectedClassification, setSelectedClassification] = useState<DocumentClassification>("internal");
@@ -179,7 +182,7 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
       const path = generateStoragePath(user.id, selectedFile.name);
       const { error: uploadError } = await supabase.storage
         .from("documents").upload(path, selectedFile, { contentType: "application/pdf", upsert: false });
-      if (uploadError) throw new Error(`Upload gagal: ${uploadError.message}`);
+      if (uploadError) throw uploadError;
       setStoragePath(path); setProgress(40);
 
       setStage("analyzing"); setMessage("AI sedang menganalisis dokumen..."); setProgress(60);
@@ -190,7 +193,11 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
         body: JSON.stringify({ storagePath: path, fileName: selectedFile.name, fileSize: selectedFile.size, title: title || selectedFile.name.replace(".pdf", ""), classificationOverride: null }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Proses gagal");
+      if (!res.ok) {
+        throw Object.assign(new Error(data.error || "Proses gagal"), {
+          friendly: data.title ? { title: data.title, message: data.error, action: data.action || "Coba lagi dalam beberapa saat.", detail: data.error } : undefined,
+        });
+      }
 
       const documentId = data.document.id;
       setProgress(80);
@@ -241,7 +248,10 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
 
     } catch (err) {
       setStage("error");
-      setMessage(err instanceof Error ? err.message : "Terjadi kesalahan");
+      const preBuilt = (err as { friendly?: FriendlyError })?.friendly;
+      const friendly = preBuilt || toFriendlyError(err, "upload");
+      setFriendlyError(friendly);
+      setMessage(friendly.message);
     }
   };
 
@@ -316,7 +326,9 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
 
     } catch (err) {
       setStage("error");
-      setMessage(err instanceof Error ? err.message : "Gagal menyimpan");
+      const friendly = toFriendlyError(err, "save");
+      setFriendlyError(friendly);
+      setMessage(friendly.message);
     }
   };
 
@@ -327,6 +339,7 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
       await cancelAndDelete(undefined, storagePath);
     }
     setSelectedFile(null); setTitle(""); setStage("idle"); setProgress(0); setMessage("");
+    setFriendlyError(null); setShowErrorDetail(false);
     setAiSuggestion(null); setStoragePath(""); setOverrideReason("");
     setSelectedCategory(""); setEditedSummary("");
     setParties([]); setPartyInput(""); setDuplicates([]);
@@ -705,12 +718,42 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
 
       {/* Error */}
       {stage === "error" && (
-        <div style={{ backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 12, padding: "14px 16px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-            <span style={{ fontSize: 18 }}>❌</span>
-            <p style={{ fontSize: 13, color: "#DC2626", margin: 0, fontWeight: 500 }}>{message}</p>
+        <div style={{ backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 12, padding: "16px 18px" }}>
+          <div style={{ display: "flex", gap: 12, marginBottom: 10 }}>
+            <span style={{ fontSize: 22, flexShrink: 0, lineHeight: 1 }}>😕</span>
+            <div>
+              <p style={{ fontSize: 14, color: "#991B1B", margin: "0 0 4px", fontWeight: 700 }}>
+                {friendlyError?.title || "Terjadi kendala"}
+              </p>
+              <p style={{ fontSize: 13, color: "#7F1D1D", margin: 0, lineHeight: 1.5 }}>
+                {friendlyError?.message || message}
+              </p>
+            </div>
           </div>
-          <button onClick={handleCancel} style={{ fontSize: 12, color: "#0344D8", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>Coba lagi →</button>
+
+          {friendlyError?.action && (
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-start", backgroundColor: "#FFF5F5", border: "1px solid #FED7D7", borderRadius: 8, padding: "8px 10px", marginBottom: 10 }}>
+              <span style={{ fontSize: 13 }}>💡</span>
+              <p style={{ fontSize: 12, color: "#7F1D1D", margin: 0, lineHeight: 1.5 }}>{friendlyError.action}</p>
+            </div>
+          )}
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <button onClick={handleCancel} style={{ fontSize: 12, fontWeight: 600, color: "#0344D8", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>
+              Coba lagi →
+            </button>
+            {friendlyError?.detail && (
+              <button onClick={() => setShowErrorDetail(v => !v)} style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>
+                {showErrorDetail ? "Sembunyikan detail teknis" : "Lihat detail teknis"}
+              </button>
+            )}
+          </div>
+
+          {showErrorDetail && friendlyError?.detail && (
+            <pre style={{ marginTop: 10, fontSize: 11, color: "#6B7280", backgroundColor: "#FAFAFA", border: "1px solid #EFEFEF", borderRadius: 8, padding: "8px 10px", whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "monospace" }}>
+              {friendlyError.detail}
+            </pre>
+          )}
         </div>
       )}
       {/* Warning Modal */}

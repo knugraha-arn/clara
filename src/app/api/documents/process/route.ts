@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { analyzeDocumentPreview, analyzeScannedDocument, generateEmbedding, chunkText } from "@/lib/openai";
+import { toFriendlyError } from "@/lib/errors/friendlyMessage";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
+  let createdDocId: string | undefined;
   try {
     const supabase = await createClient();
     const adminSupabase = await createAdminClient();
@@ -38,8 +40,13 @@ export async function POST(request: NextRequest) {
 
     if (docError || !doc) {
       console.error("[Process] DB insert error:", docError);
-      return NextResponse.json({ error: "Gagal menyimpan dokumen" }, { status: 500 });
+      return NextResponse.json({
+        error: "Sistem gagal menyimpan data awal dokumen ini ke database.",
+        title: "Gagal menyimpan dokumen",
+        action: "Coba upload ulang. Kalau masih gagal, hubungi admin.",
+      }, { status: 500 });
     }
+    createdDocId = doc.id;
 
     // 2. Download dari storage
     const { data: fileData, error: downloadError } = await adminSupabase.storage
@@ -47,7 +54,11 @@ export async function POST(request: NextRequest) {
 
     if (downloadError || !fileData) {
       await supabase.from("documents").update({ status: "error" }).eq("id", doc.id);
-      return NextResponse.json({ error: "Gagal mengunduh file" }, { status: 500 });
+      return NextResponse.json({
+        error: "File sudah terupload, tapi sistem gagal mengambilnya kembali dari storage untuk dianalisis.",
+        title: "Gagal mengambil file dari storage",
+        action: "Coba upload ulang dalam beberapa saat. Kalau berulang, mungkin ada gangguan di storage — hubungi admin.",
+      }, { status: 500 });
     }
 
     const arrayBuffer = await fileData.arrayBuffer();
@@ -186,6 +197,24 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error("[Process] Unexpected error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    const friendly = toFriendlyError(error, "process");
+
+    // Supaya dokumen tidak nyangkut selamanya di status "processing" kalau
+    // gagal di tengah jalan — user bisa lihat dokumennya berstatus error
+    // dan tahu harus upload ulang, bukan nunggu yang tidak akan pernah selesai.
+    if (createdDocId) {
+      try {
+        const adminSupabase = await createAdminClient();
+        await adminSupabase.from("documents").update({ status: "error" }).eq("id", createdDocId);
+      } catch (markError) {
+        console.error("[Process] Gagal menandai dokumen sebagai error:", markError);
+      }
+    }
+
+    return NextResponse.json({
+      error: friendly.message,
+      title: friendly.title,
+      action: friendly.action,
+    }, { status: 500 });
   }
 }
