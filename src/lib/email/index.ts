@@ -74,6 +74,7 @@ function fieldLabel(field: string): string {
     summary: "Ringkasan",
     tags: "Tags",
     valid_until: "Berlaku Hingga",
+    classification: "Klasifikasi",
   };
   return labels[field] || field;
 }
@@ -150,3 +151,73 @@ export function buildEditDecisionNotificationEmail(params: {
 
   return emailShell(body, documentUrl, "Lihat Dokumen →");
 }
+
+export function buildNumberRequestNotificationEmail(params: {
+  number: string;
+  partyName: string;
+  description: string;
+  date: string;
+  requesterName: string;
+  requesterRole: string;
+  backdatedReason: string | null;
+  approvalUrl: string;
+}): string {
+  const { number, partyName, description, date, requesterName, requesterRole, backdatedReason, approvalUrl } = params;
+  const formattedDate = new Date(date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+
+  const body = `
+    <h2 style="font-size: 18px; color: #1A1F2E; margin: 0 0 8px;">Pengajuan Nomor Surat Backdated</h2>
+    <p style="font-size: 14px; color: #374151; margin: 0 0 16px; line-height: 1.6;">
+      <strong>${requesterName}</strong> (${requesterRole}) mengajukan nomor surat dengan tanggal mundur (backdated) yang perlu persetujuanmu:
+    </p>
+    <p style="font-size: 14px; font-weight: 600; color: ${BRAND_COLOR}; margin: 0 0 16px; padding: 10px 14px; background-color: #EEF2FF; border-radius: 8px;">${number}</p>
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+      <tbody>
+        <tr><td style="padding: 6px 0; font-size: 12px; color: #9CA3AF; width: 120px;">Pihak</td><td style="padding: 6px 0; font-size: 13px; color: #374151;">${partyName}</td></tr>
+        <tr><td style="padding: 6px 0; font-size: 12px; color: #9CA3AF;">Tanggal Surat</td><td style="padding: 6px 0; font-size: 13px; color: #374151;">${formattedDate}</td></tr>
+        <tr><td style="padding: 6px 0; font-size: 12px; color: #9CA3AF;">Perihal</td><td style="padding: 6px 0; font-size: 13px; color: #374151;">${description}</td></tr>
+      </tbody>
+    </table>
+    ${backdatedReason ? `
+    <p style="font-size: 13px; color: #6B7280; margin: 0 0 4px;">Alasan backdated:</p>
+    <p style="font-size: 14px; color: #374151; margin: 0; padding: 10px 14px; background-color: #F9FAFB; border-radius: 8px; font-style: italic;">"${backdatedReason}"</p>
+    ` : ""}
+    <p style="font-size: 13px; color: #6B7280; margin: 20px 0 0;">Silakan tinjau dan ambil keputusan langsung di CLARA.</p>
+  `;
+
+  return emailShell(body, approvalUrl, "Tinjau di CLARA →");
+}
+
+export function buildNumberDecisionNotificationEmail(params: {
+  number: string;
+  description: string;
+  decision: "approved" | "revision" | "rejected" | "void";
+  reviewerName: string;
+  reviewNote: string | null;
+  documentUrl: string;
+}): string {
+  const { number, description, decision, reviewerName, reviewNote, documentUrl } = params;
+
+  const DECISION_CFG: Record<string, { label: string; verb: string }> = {
+    approved: { label: "Disetujui ✅", verb: "disetujui" },
+    revision: { label: "Perlu Direvisi 🔄", verb: "dikembalikan untuk direvisi" },
+    rejected: { label: "Ditolak ❌", verb: "ditolak" },
+    void: { label: "Dibatalkan (Void) ⛔", verb: "dibatalkan (void)" },
+  };
+  const cfg = DECISION_CFG[decision] || DECISION_CFG.rejected;
+
+  const body = `
+    <h2 style="font-size: 18px; color: #1A1F2E; margin: 0 0 8px;">Nomor Surat ${cfg.label}</h2>
+    <p style="font-size: 14px; color: #374151; margin: 0 0 16px; line-height: 1.6;">
+      Pengajuan nomor surat kamu berikut telah <strong>${cfg.verb}</strong> oleh ${reviewerName}:
+    </p>
+    <p style="font-size: 14px; font-weight: 600; color: ${BRAND_COLOR}; margin: 0 0 16px; padding: 10px 14px; background-color: #EEF2FF; border-radius: 8px;">${number} — ${description}</p>
+    ${reviewNote ? `
+    <p style="font-size: 13px; color: #6B7280; margin: 0 0 4px;">Catatan:</p>
+    <p style="font-size: 14px; color: #374151; margin: 0; padding: 10px 14px; background-color: #F9FAFB; border-radius: 8px; font-style: italic;">"${reviewNote}"</p>
+    ` : ""}
+  `;
+
+  return emailShell(body, documentUrl, "Lihat Nomor Surat →");
+}
+
