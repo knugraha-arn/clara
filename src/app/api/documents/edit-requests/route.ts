@@ -4,7 +4,7 @@ import { logEvent } from "@/lib/audit";
 import { sendEmail, buildEditRequestNotificationEmail } from "@/lib/email";
 import type { DocumentEditableFields } from "@/types";
 
-const EDITABLE_FIELDS = ["title", "category", "summary", "tags", "valid_until"] as const;
+const EDITABLE_FIELDS = ["title", "category", "summary", "tags", "valid_until", "classification"] as const;
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
 
   const { data: doc } = await adminSupabase
     .from("documents")
-    .select("id, title, category, summary, tags, valid_until")
+    .select("id, title, category, summary, tags, valid_until, classification")
     .eq("id", documentId)
     .single();
 
@@ -46,6 +46,15 @@ export async function POST(request: NextRequest) {
         ? JSON.stringify(oldVal) !== JSON.stringify(newVal)
         : oldVal !== newVal;
       if (changed) changes[field] = { old: oldVal, new: newVal };
+    }
+  }
+
+  // Klasifikasi itu security-sensitive (ISO 27001 A.5.12) — validasi ketat di server,
+  // jangan cuma percaya UI, karena field ini bisa saja dipanggil langsung lewat API.
+  if ("classification" in changes) {
+    const validClassifications = ["public", "internal", "confidential", "restricted"];
+    if (!validClassifications.includes(String(changes.classification.new))) {
+      return NextResponse.json({ error: "Klasifikasi tidak valid" }, { status: 400 });
     }
   }
 

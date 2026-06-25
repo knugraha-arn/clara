@@ -56,6 +56,7 @@ export interface DocumentEditableFields {
   summary?: string;
   tags?: string[];
   valid_until?: string | null;
+  classification?: DocumentClassification;
 }
 
 export interface DocumentEditRequest {

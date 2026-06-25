@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { Document, DocumentCategory } from "@/types";
+import type { Document, DocumentCategory, DocumentClassification } from "@/types";
 import { CATEGORY_LABELS, CLS_CFG, formatDateTime, formatSize } from "@/lib/utils";
 import { useRole } from "@/components/layout/DashboardShell";
 import { useCategories } from "@/lib/hooks/useCategories";
 import { useToast } from "@/components/ui/Toast";
+
+const CLASSIFICATION_ORDER: DocumentClassification[] = ["public", "internal", "confidential", "restricted"];
 
 const formatDate = formatDateTime;
 
@@ -24,6 +26,7 @@ function RequestEditModal({ doc, categories, onSubmit, onCancel, submitting }: {
 }) {
   const [title, setTitle] = useState(doc.title);
   const [category, setCategory] = useState(doc.category);
+  const [classification, setClassification] = useState(doc.classification);
   const [summary, setSummary] = useState(doc.summary || "");
   const [tagsInput, setTagsInput] = useState((doc.tags || []).join(", "));
   const [validUntil, setValidUntil] = useState(doc.valid_until || "");
@@ -33,6 +36,7 @@ function RequestEditModal({ doc, categories, onSubmit, onCancel, submitting }: {
   const hasChanges =
     title.trim() !== doc.title ||
     category !== doc.category ||
+    classification !== doc.classification ||
     summary.trim() !== (doc.summary || "") ||
     JSON.stringify(newTags) !== JSON.stringify(doc.tags || []) ||
     (validUntil || null) !== (doc.valid_until || null);
@@ -44,6 +48,7 @@ function RequestEditModal({ doc, categories, onSubmit, onCancel, submitting }: {
     const fields: Record<string, unknown> = {};
     if (title.trim() !== doc.title) fields.title = title.trim();
     if (category !== doc.category) fields.category = category;
+    if (classification !== doc.classification) fields.classification = classification;
     if (summary.trim() !== (doc.summary || "")) fields.summary = summary.trim();
     if (JSON.stringify(newTags) !== JSON.stringify(doc.tags || [])) fields.tags = newTags;
     if ((validUntil || null) !== (doc.valid_until || null)) fields.valid_until = validUntil || null;
@@ -68,6 +73,18 @@ function RequestEditModal({ doc, categories, onSubmit, onCancel, submitting }: {
               style={{ width: "100%", marginTop: 6, border: "1px solid #E5E7EB", borderRadius: 8, padding: "9px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", backgroundColor: "white" }}>
               {categories.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
             </select>
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Klasifikasi</label>
+            <select value={classification} onChange={e => setClassification(e.target.value as DocumentClassification)} disabled={submitting}
+              style={{ width: "100%", marginTop: 6, border: "1px solid #E5E7EB", borderRadius: 8, padding: "9px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", backgroundColor: "white" }}>
+              {CLASSIFICATION_ORDER.map(c => <option key={c} value={c}>{CLS_CFG[c].label}</option>)}
+            </select>
+            {classification !== doc.classification && (
+              <p style={{ fontSize: 11, color: "#D97706", margin: "6px 0 0" }}>
+                ⚠️ Perubahan klasifikasi adalah hal sensitif — pastikan alasan di bawah menjelaskan kenapa level ini perlu berubah.
+              </p>
+            )}
           </div>
           <div>
             <label style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Ringkasan</label>

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useTransition } from "react";
 import { useRole } from "@/components/layout/DashboardShell";
 import { useToast } from "@/components/ui/Toast";
 import { SkeletonPage } from "@/components/ui/Skeleton";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, CLS_CFG } from "@/lib/utils";
 import type { DocumentEditRequest } from "@/types";
 
 const STATUS_CFG: Record<string, { label: string; color: string; bg: string; icon: string }> = {
@@ -19,6 +19,7 @@ const FIELD_LABELS: Record<string, string> = {
   summary: "Ringkasan",
   tags: "Tags",
   valid_until: "Berlaku Hingga",
+  classification: "Klasifikasi",
 };
 
 function formatChangeValue(value: unknown): string {
@@ -166,11 +167,25 @@ export default function EditRequestsPage() {
 
                 <div style={{ backgroundColor: "#F9FAFB", borderRadius: 8, padding: "10px 12px", marginBottom: 10 }}>
                   {Object.entries(req.changes).map(([field, { old, new: newVal }]) => (
-                    <div key={field} style={{ fontSize: 12, marginBottom: 4, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <div key={field} style={{ fontSize: 12, marginBottom: 4, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                       <span style={{ color: "#6B7280", fontWeight: 600, minWidth: 100 }}>{FIELD_LABELS[field] || field}:</span>
-                      <span style={{ color: "#DC2626", textDecoration: "line-through" }}>{formatChangeValue(old)}</span>
-                      <span style={{ color: "#9CA3AF" }}>→</span>
-                      <span style={{ color: "#16A34A", fontWeight: 600 }}>{formatChangeValue(newVal)}</span>
+                      {field === "classification" ? (
+                        <>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: (CLS_CFG[String(old)] || CLS_CFG.internal).color, backgroundColor: (CLS_CFG[String(old)] || CLS_CFG.internal).bg, padding: "2px 8px", borderRadius: 4 }}>
+                            {(CLS_CFG[String(old)] || CLS_CFG.internal).label}
+                          </span>
+                          <span style={{ color: "#9CA3AF" }}>→</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: (CLS_CFG[String(newVal)] || CLS_CFG.internal).color, backgroundColor: (CLS_CFG[String(newVal)] || CLS_CFG.internal).bg, padding: "2px 8px", borderRadius: 4, border: "1px solid currentColor" }}>
+                            {(CLS_CFG[String(newVal)] || CLS_CFG.internal).label}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span style={{ color: "#DC2626", textDecoration: "line-through" }}>{formatChangeValue(old)}</span>
+                          <span style={{ color: "#9CA3AF" }}>→</span>
+                          <span style={{ color: "#16A34A", fontWeight: 600 }}>{formatChangeValue(newVal)}</span>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
