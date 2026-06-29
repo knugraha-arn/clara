@@ -573,9 +573,25 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
 
             {/* Klasifikasi */}
             <div>
-              <p style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                {(aiSuggestion.is_scanned && !aiSuggestion.used_vision) ? "Pilih Klasifikasi" : `Klasifikasi AI (${Math.round(aiSuggestion.classification_confidence * 100)}% yakin)`}
-              </p>
+              {(() => {
+                const conf = aiSuggestion.classification_confidence;
+                const confColor = conf >= 0.75 ? "#16A34A" : conf >= 0.5 ? "#D97706" : "#DC2626";
+                return (
+                  <p style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    {(aiSuggestion.is_scanned && !aiSuggestion.used_vision) ? "Pilih Klasifikasi" : (
+                      <>Klasifikasi AI (<span style={{ color: confColor }}>{Math.round(conf * 100)}% yakin</span>)</>
+                    )}
+                  </p>
+                );
+              })()}
+              {(!aiSuggestion.is_scanned || aiSuggestion.used_vision) && aiSuggestion.classification_confidence < 0.5 && (
+                <div style={{ display: "flex", gap: 6, alignItems: "flex-start", backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, padding: "7px 10px", marginBottom: 8 }}>
+                  <span style={{ fontSize: 12 }}>⚠️</span>
+                  <p style={{ fontSize: 11, color: "#991B1B", margin: 0, lineHeight: 1.4 }}>
+                    AI kurang yakin dengan saran klasifikasi ini — tolong cek isi dokumen sebelum lanjut, jangan langsung disetujui begitu saja.
+                  </p>
+                </div>
+              )}
               {(!aiSuggestion.is_scanned || aiSuggestion.used_vision) && (
                 <div style={{ backgroundColor: CLASSIFICATION_CONFIG[aiSuggestion.classification].bg, border: `1px solid ${CLASSIFICATION_CONFIG[aiSuggestion.classification].border}`, borderRadius: 8, padding: "8px 12px", marginBottom: 8 }}>
                   <span style={{ fontSize: 12, fontWeight: 700, color: CLASSIFICATION_CONFIG[aiSuggestion.classification].color }}>{CLASSIFICATION_CONFIG[aiSuggestion.classification].label}</span>
