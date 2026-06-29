@@ -52,6 +52,35 @@ export default function ConfigPage() {
   const [deleting, setDeleting] = useState(false);
   const [docSearch, setDocSearch] = useState("");
 
+  // Stale draft cleanup state
+  interface StaleDraft { id: string; title: string; fileSizeBytes: number; createdAt: string; userName: string | null; }
+  const [staleDrafts, setStaleDrafts] = useState<StaleDraft[]>([]);
+  const [staleThreshold, setStaleThreshold] = useState(24);
+  const [staleLoading, setStaleLoading] = useState(true);
+  const [cleaningUp, setCleaningUp] = useState(false);
+
+  const loadStaleDrafts = () => {
+    fetch("/api/admin/cleanup-drafts")
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(d => { setStaleDrafts(d.drafts || []); setStaleThreshold(d.thresholdHours || 24); setStaleLoading(false); })
+      .catch(() => setStaleLoading(false));
+  };
+
+  const handleCleanupNow = async () => {
+    setCleaningUp(true);
+    try {
+      const res = await fetch("/api/admin/cleanup-drafts", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error();
+      toastSuccess(`${data.deletedCount} draft nyangkut berhasil dibersihkan${data.failedIds?.length ? ` (${data.failedIds.length} gagal)` : ""}.`);
+      loadStaleDrafts();
+    } catch {
+      toastError("Gagal membersihkan draft. Coba lagi.");
+    } finally {
+      setCleaningUp(false);
+    }
+  };
+
   useEffect(() => {
     if (!canAccess) return;
     import("@/lib/supabase/client").then(({ createClient }) => {
@@ -66,6 +95,7 @@ export default function ConfigPage() {
       .then(r => { if (!r.ok) throw new Error(); return r.json(); })
       .then(d => { setDocuments(d.documents || []); setDocsLoading(false); })
       .catch(() => { toastError("Gagal memuat daftar dokumen."); setDocsLoading(false); });
+    loadStaleDrafts();
   }, [canAccess, toastError]);
 
   const handleUserAction = async (userId: string, action: string, newRole?: string) => {
@@ -284,6 +314,42 @@ export default function ConfigPage() {
         {/* ===================== DOCUMENTS TAB ===================== */}
         {activeTab === "documents" && (
           <>
+            {/* Stale draft cleanup panel */}
+            <div style={{ backgroundColor: "white", border: "1px solid #EFEFEF", borderRadius: 12, padding: "14px 16px", marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: "#1A1F2E", margin: "0 0 4px" }}>🧹 Draft Nyangkut</p>
+                  <p style={{ fontSize: 12, color: "#6B7280", margin: 0 }}>
+                    Dokumen yang diupload tapi nggak pernah dikonfirmasi (user tutup tab/koneksi putus). Dibersihkan otomatis tiap jam kalau sudah &gt; {staleThreshold} jam — panel ini cuma buat lihat & bersihin lebih cepat kalau perlu.
+                  </p>
+                </div>
+                {staleDrafts.length > 0 && (
+                  <button onClick={handleCleanupNow} disabled={cleaningUp}
+                    style={{ backgroundColor: "#D97706", color: "white", border: "none", borderRadius: 10, padding: "8px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", flexShrink: 0, opacity: cleaningUp ? 0.6 : 1, whiteSpace: "nowrap" }}>
+                    {cleaningUp ? "⏳ Membersihkan..." : `🗑️ Bersihkan Sekarang (${staleDrafts.length})`}
+                  </button>
+                )}
+              </div>
+
+              {staleLoading ? (
+                <p style={{ fontSize: 12, color: "#9CA3AF", margin: "10px 0 0" }}>Memuat...</p>
+              ) : staleDrafts.length === 0 ? (
+                <p style={{ fontSize: 12, color: "#16A34A", margin: "10px 0 0" }}>✅ Tidak ada draft nyangkut saat ini.</p>
+              ) : (
+                <div style={{ marginTop: 10, borderTop: "1px solid #F5F5F5", paddingTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                  {staleDrafts.slice(0, 8).map(d => (
+                    <div key={d.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                      <span style={{ color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginRight: 8 }}>{d.title}</span>
+                      <span style={{ color: "#9CA3AF", flexShrink: 0 }}>{d.userName || "—"} · {formatSize(d.fileSizeBytes)} · {formatDate(d.createdAt)}</span>
+                    </div>
+                  ))}
+                  {staleDrafts.length > 8 && (
+                    <p style={{ fontSize: 11, color: "#9CA3AF", margin: 0 }}>+ {staleDrafts.length - 8} lainnya</p>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div style={{ backgroundColor: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 10, padding: "12px 16px", marginBottom: 16, display: "flex", gap: 8 }}>
               <span>⚠️</span>
               <p style={{ fontSize: 12, color: "#7F1D1D", margin: 0 }}>Penghapusan permanen dan tidak bisa dikembalikan. Gunakan hanya untuk duplikat atau dokumen error.</p>
