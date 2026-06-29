@@ -14,7 +14,9 @@ const ANALYSIS_INSTRUCTIONS = `Berikan HANYA JSON berikut tanpa penjelasan lain:
   "tags": ["keyword1", "keyword2", "keyword3"],
   "document_date": "YYYY-MM-DD atau null",
   "sender": "nama pengirim atau null",
-  "recipient": "nama penerima atau null"
+  "recipient": "nama penerima atau null",
+  "suggested_valid_until": "YYYY-MM-DD atau null",
+  "compliance_flags": ["string", "..."]
 }
 
 Panduan kategori:
@@ -41,7 +43,18 @@ Panduan klasifikasi:
 - confidential: kontrak, data keuangan, data pelanggan, perjanjian bisnis
 - restricted: NDA, data akuisisi, rahasia dagang, informasi board level, invoice, purchase order, berita acara
 
-PENTING: Dokumen dengan kategori invoice, po, atau berita_acara HARUS diklasifikasikan sebagai restricted kecuali ada alasan kuat sebaliknya.`;
+PENTING: Dokumen dengan kategori invoice, po, atau berita_acara HARUS diklasifikasikan sebagai restricted kecuali ada alasan kuat sebaliknya.
+
+Panduan "suggested_valid_until":
+- ISI HANYA kalau dokumen secara EKSPLISIT menyebut tanggal/jangka waktu berakhir/berlaku (contoh: "berlaku sampai dengan 31 Desember 2027", "masa kontrak 2 tahun terhitung dari 1 Januari 2026", "jatuh tempo 30 hari setelah invoice diterbitkan" — hitung tanggal pastinya dari document_date kalau perlu)
+- Kalau dokumen TIDAK menyebut tanggal/jangka waktu berakhir secara eksplisit, isi null — JANGAN menebak atau memberi tanggal default
+
+Panduan "compliance_flags" (array string singkat, kosongkan [] kalau tidak ada temuan):
+- Untuk kontrak/NDA: flag kalau tidak terlihat ada halaman/blok tanda tangan kedua pihak, atau tidak ada tanggal mulai/berakhir yang jelas
+- Untuk invoice/PO: flag kalau tidak ada nominal total yang jelas, atau tidak ada nomor referensi/invoice
+- Untuk berita_acara: flag kalau tidak ada tanda tangan pihak yang terlibat
+- Jangan memberi flag yang mengada-ada — kalau dokumen terlihat lengkap dan wajar, biarkan array kosong
+- Setiap flag maksimal 1 kalimat singkat, bahasa Indonesia, langsung ke poin (contoh: "Tidak ditemukan blok tanda tangan di akhir dokumen")`;
 
 function fallbackResult(): AiAnalysisResult {
   return {
@@ -55,6 +68,8 @@ function fallbackResult(): AiAnalysisResult {
     document_date: null,
     sender: null,
     recipient: null,
+    suggested_valid_until: null,
+    compliance_flags: [],
   };
 }
 
@@ -70,6 +85,16 @@ function parseAnalysisResponse(text: string): AiAnalysisResult {
 
   const validClassifications: DocumentClassification[] = ["public", "internal", "confidential", "restricted"];
   if (!validClassifications.includes(parsed.classification)) parsed.classification = "internal";
+
+  // Validasi ringan — kalau model ngasih format aneh, jangan sampai patah di caller
+  if (typeof parsed.suggested_valid_until !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(parsed.suggested_valid_until)) {
+    parsed.suggested_valid_until = null;
+  }
+  if (!Array.isArray(parsed.compliance_flags)) {
+    parsed.compliance_flags = [];
+  } else {
+    parsed.compliance_flags = parsed.compliance_flags.filter(f => typeof f === "string" && f.trim().length > 0).slice(0, 6);
+  }
 
   return parsed;
 }

@@ -32,6 +32,8 @@ interface AiSuggestion {
   used_vision: boolean;
   page_count: number;
   documentId: string;
+  suggested_valid_until: string | null;
+  compliance_flags: string[];
 }
 
 interface DocumentUploadProps { onSuccess?: () => void; preSelectedNumberId?: string; }
@@ -228,10 +230,17 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
         used_vision: data.document.used_vision || false,
         page_count: data.document.page_count || 0,
         documentId,
+        suggested_valid_until: data.document.suggested_valid_until || null,
+        compliance_flags: data.document.compliance_flags || [],
       });
       setEditedSummary(data.document.summary || "");
       setSelectedClassification(data.document.classification_ai_suggestion || data.document.classification);
       setSelectedCategory(data.document.category || "lainnya");
+      // Pre-fill masa berlaku kalau AI nemu tanggal berakhir eksplisit di teks dokumen —
+      // tetap bisa diubah/dikosongkan manual, ini cuma starting point biar nggak perlu cari ulang.
+      if (data.document.suggested_valid_until) {
+        setValidUntil(data.document.suggested_valid_until);
+      }
 
       // Fetch issued numbers untuk linking
       try {
@@ -422,6 +431,24 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
           </div>
 
           <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 16 }}>
+
+            {/* Compliance scanner — temuan AI soal kelengkapan dokumen */}
+            {aiSuggestion.compliance_flags.length > 0 && (
+              <div style={{ backgroundColor: "#FFFBEB", border: "2px solid #FDE68A", borderRadius: 10, padding: "14px 16px" }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 8 }}>
+                  <span style={{ fontSize: 20, flexShrink: 0 }}>🔎</span>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#92400E", margin: "0 0 3px" }}>AI Menemukan Hal yang Perlu Diperhatikan</p>
+                    <p style={{ fontSize: 12, color: "#78350F", margin: 0 }}>Bukan blocker — cuma pengingat sebelum disimpan, sesuai dengan kontrol kelengkapan dokumen di Kepatuhan ISO.</p>
+                  </div>
+                </div>
+                <ul style={{ margin: "0 0 0 30px", padding: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+                  {aiSuggestion.compliance_flags.map((flag, i) => (
+                    <li key={i} style={{ fontSize: 12, color: "#78350F" }}>{flag}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {/* Duplikat warning */}
             {duplicates.length > 0 && (
@@ -676,6 +703,9 @@ export default function DocumentUpload({ onSuccess, preSelectedNumberId }: Docum
               {validUntil && (
                 <p style={{ fontSize: 11, color: "#16A34A", margin: "4px 0 0", fontWeight: 500 }}>
                   ✓ Berlaku hingga: {new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(new Date(validUntil))}
+                  {aiSuggestion.suggested_valid_until === validUntil && (
+                    <span style={{ color: "#0344D8", fontWeight: 600 }}> · ✨ diisi otomatis dari teks dokumen</span>
+                  )}
                 </p>
               )}
               {!validUntil && isKontrak && (

@@ -184,4 +184,8 @@ export interface AiAnalysisResult {
   document_date: string | null;
   sender: string | null;
   recipient: string | null;
+  /** Tanggal kadaluarsa/berakhir yang disebut EKSPLISIT di teks dokumen, kalau ada */
+  suggested_valid_until: string | null;
+  /** Hal-hal yang AI nilai kurang/perlu diperhatikan — kosong kalau tidak ada temuan */
+  compliance_flags: string[];
 }

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { Document, DocumentCategory, DocumentClassification } from "@/types";
 import { CATEGORY_LABELS, CLS_CFG, formatDateTime, formatSize } from "@/lib/utils";
 import { useRole } from "@/components/layout/DashboardShell";
 import { useCategories } from "@/lib/hooks/useCategories";
 import { useToast } from "@/components/ui/Toast";
+import { toFriendlyError } from "@/lib/errors/friendlyMessage";
 
 const CLASSIFICATION_ORDER: DocumentClassification[] = ["public", "internal", "confidential", "restricted"];
 
@@ -119,6 +120,128 @@ function RequestEditModal({ doc, categories, onSubmit, onCancel, submitting }: {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+interface AskMessage { role: "user" | "assistant"; content: string; isLimitNotice?: boolean; isError?: boolean; }
+
+function DocumentAskPanel({ documentId }: { documentId: string }) {
+  const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState<AskMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [remaining, setRemaining] = useState<number | null>(null);
+  const [isUnlimited, setIsUnlimited] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    fetch("/api/ai-assistant")
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(d => { setRemaining(d.remaining); setIsUnlimited(d.isUnlimited); })
+      .catch(() => {});
+  }, [open]);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages, sending]);
+
+  const quotaExhausted = remaining !== null && !isUnlimited && remaining <= 0;
+
+  const handleSend = async () => {
+    const question = input.trim();
+    if (!question || sending || quotaExhausted) return;
+
+    const history = messages.filter(m => !m.isLimitNotice && !m.isError).map(m => ({ role: m.role, content: m.content }));
+    setMessages(prev => [...prev, { role: "user", content: question }]);
+    setInput("");
+    setSending(true);
+
+    try {
+      const res = await fetch(`/api/documents/${documentId}/ask`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question, history }),
+      });
+      const data = await res.json();
+
+      if (res.status === 429 && data.limitReached) {
+        setMessages(prev => [...prev, { role: "assistant", content: data.error, isLimitNotice: true }]);
+        setRemaining(0);
+        return;
+      }
+      if (!res.ok) throw new Error(data.error || "Gagal mendapat jawaban");
+
+      setMessages(prev => [...prev, { role: "assistant", content: data.answer }]);
+      if (data.usage) { setRemaining(data.usage.remaining); setIsUnlimited(data.usage.isUnlimited); }
+    } catch (err) {
+      const friendly = toFriendlyError(err, "process");
+      setMessages(prev => [...prev, { role: "assistant", content: friendly.message, isError: true }]);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div style={{ marginBottom: 20, border: "1px solid #EFEFEF", borderRadius: 10, overflow: "hidden" }}>
+      <button onClick={() => setOpen(v => !v)}
+        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", backgroundColor: "#FAFAFA", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: "#1A1F2E" }}>💬 Tanya Dokumen Ini</span>
+        <span style={{ fontSize: 11, color: "#9CA3AF" }}>{open ? "▲ Tutup" : "▼ Buka"}</span>
+      </button>
+
+      {open && (
+        <div>
+          <div ref={scrollRef} style={{ maxHeight: 220, overflowY: "auto", padding: messages.length ? "10px 12px" : "16px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+            {messages.length === 0 ? (
+              <p style={{ fontSize: 11.5, color: "#9CA3AF", margin: 0, textAlign: "center" }}>
+                Tanya hal spesifik dari dokumen ini — misal &ldquo;kapan masa berlakunya?&rdquo; atau &ldquo;siapa yang tanda tangan?&rdquo;
+              </p>
+            ) : (
+              messages.map((m, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
+                  <div style={{
+                    maxWidth: "85%", padding: "7px 11px", borderRadius: 10, fontSize: 12, lineHeight: 1.5, whiteSpace: "pre-wrap",
+                    backgroundColor: m.isLimitNotice ? "#FFFBEB" : m.isError ? "#FEF2F2" : m.role === "user" ? "#0344D8" : "white",
+                    color: m.isLimitNotice ? "#92400E" : m.isError ? "#991B1B" : m.role === "user" ? "white" : "#1A1F2E",
+                    border: m.role === "assistant" && !m.isLimitNotice && !m.isError ? "1px solid #EFEFEF" : "none",
+                  }}>
+                    {m.content}
+                  </div>
+                </div>
+              ))
+            )}
+            {sending && <p style={{ fontSize: 11, color: "#9CA3AF", margin: 0 }}>⏳ Membaca dokumen...</p>}
+          </div>
+
+          <div style={{ borderTop: "1px solid #F5F5F5", padding: "8px 10px" }}>
+            {quotaExhausted ? (
+              <p style={{ fontSize: 11, color: "#DC2626", textAlign: "center", margin: 0 }}>Batas pertanyaan harian tercapai. Reset besok.</p>
+            ) : (
+              <div style={{ display: "flex", gap: 6 }}>
+                <input
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleSend(); } }}
+                  placeholder="Tanya soal dokumen ini..."
+                  disabled={sending}
+                  style={{ flex: 1, border: "1px solid #E5E7EB", borderRadius: 8, padding: "7px 10px", fontSize: 12, fontFamily: "inherit", outline: "none" }}
+                />
+                <button onClick={handleSend} disabled={sending || !input.trim()}
+                  style={{ backgroundColor: "#0344D8", color: "white", border: "none", borderRadius: 8, padding: "0 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", opacity: sending || !input.trim() ? 0.5 : 1 }}>
+                  Kirim
+                </button>
+              </div>
+            )}
+            {remaining !== null && !quotaExhausted && (
+              <p style={{ fontSize: 10, color: "#9CA3AF", margin: "5px 0 0", textAlign: "center" }}>
+                {isUnlimited ? "Kuota unlimited" : `${remaining} pertanyaan tersisa hari ini (kuota gabungan dengan Tanya CLARA)`}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -346,6 +469,8 @@ export default function DocumentSidePanel({ document: doc, uploaderName, onClose
                 </div>
               </div>
             )}
+            {/* Tanya Dokumen Ini */}
+            <DocumentAskPanel documentId={doc.id} />
           </div>
         )}
 

@@ -192,6 +192,8 @@ export async function POST(request: NextRequest) {
         is_scanned: isScanned,
         used_vision: usedVision,
         page_count: pageCount,
+        suggested_valid_until: aiResult.suggested_valid_until,
+        compliance_flags: aiResult.compliance_flags,
       },
     });
 
