@@ -55,16 +55,27 @@ export async function GET() {
 
   const allLogs = logs || [];
 
-  // Top uploaders — semua dokumen yang pernah diupload (tidak dibatasi 30 hari)
+  // Top uploaders — semua dokumen yang pernah diupload (tidak dibatasi 30 hari).
+  // PENTING: documents.user_id FK-nya ke auth.users, bukan ke public.profiles, jadi
+  // embedded select `profiles(...)` langsung dari documents tidak bisa di-resolve
+  // PostgREST (gagal diam-diam, data jadi kosong). Query manual 2 langkah seperti ini
+  // sama dengan pola yang sudah dipakai di /api/uploaders.
   const { data: recentDocs } = await supabase
     .from("documents")
-    .select("user_id, profiles(full_name, email)")
+    .select("user_id")
     .eq("status", "ready");
 
+  const uploaderUserIds = [...new Set((recentDocs || []).map(d => d.user_id).filter(Boolean))];
+  const { data: uploaderProfiles } = uploaderUserIds.length
+    ? await supabase.from("profiles").select("id, full_name, email").in("id", uploaderUserIds)
+    : { data: [] as { id: string; full_name: string; email: string }[] };
+  const uploaderProfileMap: Record<string, { full_name: string; email: string }> = {};
+  (uploaderProfiles || []).forEach(p => { uploaderProfileMap[p.id] = p; });
+
   const uploaderMap: Record<string, { name: string; count: number }> = {};
-  (recentDocs || []).forEach((d: { user_id: string; profiles: { full_name: string; email: string }[] | { full_name: string; email: string } | null }) => {
+  (recentDocs || []).forEach((d: { user_id: string }) => {
     const key = d.user_id;
-    const profile = Array.isArray(d.profiles) ? d.profiles[0] : d.profiles;
+    const profile = uploaderProfileMap[key];
     const name = profile?.full_name || profile?.email || "Unknown";
     if (!uploaderMap[key]) uploaderMap[key] = { name, count: 0 };
     uploaderMap[key].count++;
